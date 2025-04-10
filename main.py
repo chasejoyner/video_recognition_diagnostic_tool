@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 import mediapipe as mp
 import tkinter as tk
+from tkinter import messagebox
 
 
 class PoseRecorderApp:
