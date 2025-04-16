@@ -7,8 +7,6 @@ import numpy as np
 
 import cv2
 import mediapipe as mp
-import tkinter as tk
-from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 
 from gui import PoseGUIApp
@@ -64,8 +62,6 @@ class PoseRecorderApp(PoseGUIApp):
         self.out = None
         self.startTime = 0
         self.lastFilename = None
-
-        self.videoLoop()
 
 
     def recordVideo(self):
@@ -181,11 +177,6 @@ class PoseRecorderApp(PoseGUIApp):
 
 
     def saveToFolder(self, label):
-
-        if not self.lastFilename or not os.path.exists(self.lastFilename):
-            tk.messagebox.showerror('Error', 'No video to label.')
-            return
-
         os.makedirs(label, exist_ok=True)
         dest = os.path.join(label, os.path.basename(self.lastFilename))
         shutil.move(self.lastFilename, dest)
@@ -207,5 +198,11 @@ class PoseRecorderApp(PoseGUIApp):
         self.saveToFolder('bad')
 
 
+    def run(self):
+        self.videoLoop()
+        self.gui.mainloop()
+
+
 if __name__ == '__main__':
-    PoseRecorderApp()
+    app = PoseRecorderApp()
+    app.run()

@@ -1,6 +1,6 @@
 import logging
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, simpledialog
 
 # Initalize logger
 logging.basicConfig(level=logging.INFO)
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class PoseGUIApp:
     """
-    TODO: FILL THIS OUT
+    This class creates a TKinter GUI to be used by the pose recorder class.
     """
 
     def __init__(self):
@@ -52,13 +52,13 @@ class PoseGUIApp:
         self.btnBad = tk.Button(self.buttonFrame, text='Bad', font=('Arial', 14), width=20)
         self.countdownText = tk.Label(self.buttonFrame, font=('Arial', 14), fg='white', bg='#1e1e1e')
 
-        self.gui.mainloop()
-
 
     def update_dropdown_options(self):
-        """Updates the options in the OptionMenu widget."""
-        menu = self.dropdown["menu"]
-        menu.delete(0, "end")
+        """
+        Updates the options in the OptionMenu widget.
+        """
+        menu = self.dropdown['menu']
+        menu.delete(0, 'end')
         for option in self.user_options:
             menu.add_command(label=option, command=lambda value=option: self.selected_option.set(value))
         current_selection = self.selected_option.get()
