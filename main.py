@@ -1,5 +1,6 @@
 import os
 import time
+import yaml
 import shutil
 import logging
 import numpy as np
@@ -10,12 +11,14 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 
+from gui import PoseGUIApp
+
 # Initalize logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class PoseRecorderApp:
+class PoseRecorderApp(PoseGUIApp):
     """
     This class uses a connected webcam to record motion and show important bodily nodes, specified by POSE_CONNECTIONS.
     For each captured recording using a tkinter GUI, the user can select good or bad to categorize each recording.
@@ -29,18 +32,22 @@ class PoseRecorderApp:
     nodeUpdateThreshold: integer specifying the euclidean distance a node should move before updating frame
     fps: integer specifying the frames per second for recording
     """
-    POSE_CONNECTIONS = [(8, 7), (10, 9),
-                        (16, 14), (14, 12),
-                        (15, 13), (13, 11),
-                        (12, 11), (11, 23), (23, 24), (24, 12),
-                        (24, 26), (26, 28),
-                        (23, 25), (25, 27)]
 
     def __init__(self, recordingLength=5, nodeUpdateThreshold=10, fps=20):
+
+        super().__init__()
+
         # Inputs
         self.recordingLength = recordingLength
         self.nodeUpdateThreshold = nodeUpdateThreshold
         self.fps = fps
+
+        # Extract yaml contents
+        with open('settings.yaml', 'r') as file:
+            data = yaml.safe_load(file)
+        self.landmarkDictionary = data['LANDMARKS_DICTIONARY']
+        self.poseConnections = [tuple(pc) for pc in data['POSE_CONNECTIONS']]
+        self.nodes = [n for pc in self.poseConnections for n in pc]
 
         # Initialize pose and recording objects
         self.mpPose = mp.solutions.pose
@@ -52,50 +59,14 @@ class PoseRecorderApp:
         self.frameWidth = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frameHeight = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        self.usedLandmarkIndices = set()
-        for connection in self.POSE_CONNECTIONS:
-            self.usedLandmarkIndices.update(connection)
-
-        # Nuance parameters
+        self.usedLandmarkIndices = set(c for pc in self.poseConnections for c in pc)
         self.recording = False
         self.out = None
         self.startTime = 0
         self.lastFilename = None
 
-        # GUI
-        self.gui = tk.Tk()
-        self.gui.minsize(800, 600)
-        self.gui.title('Swing Recorder')
-        self.gui.configure(bg='#1e1e1e')
-        self.guiStyle = ttk.Style(self.gui)
-        self.guiStyle.theme_use('clam')
-
-        # Create video frame in top row
-        self.videoFrame = tk.Frame(self.gui, bg='#1e1e1e')
-        self.videoFrame.pack(side='top', fill='both', expand=True)
-        self.videoFrame.pack_propagate(False)
-        self.videoSection = tk.Label(self.videoFrame)
-        self.videoSection.pack(padx=10, pady=10, fill='both', expand=True)
-
-        # Create text frame in middle row
-        self.textFrame = tk.Frame(self.gui, bg='#1e1e1e')
-        self.textFrameText = tk.Label(self.textFrame, text='Select an option:', font=('Arial', 14), fg='white', bg='#1e1e1e')
-        self.textFrame.pack(fill='x', pady=0)
-        self.textFrameText.pack()
-
-        # Create button frame in bottom row
-        self.buttonFrame = tk.Frame(self.gui, height=100, bg='#1e1e1e')
-        self.buttonFrame.pack(side='bottom', fill='x', pady=10)
-        self.buttonFrame.pack_propagate(False)
-        self.btnRecord = tk.Button(self.buttonFrame, text='Record 5 Seconds', command=self.recordVideo, font=('Arial', 14), width=20)
-        self.btnRecord.pack(side='left', expand=True, padx=10)
-        self.btnGood = tk.Button(self.buttonFrame, text='Good', command=self.saveGood, font=('Arial', 14), width=20)
-        self.btnBad = tk.Button(self.buttonFrame, text='Bad', command=self.saveBad, font=('Arial', 14), width=20)
-        self.countdownText = tk.Label(self.buttonFrame, font=('Arial', 14), fg='white', bg='#1e1e1e')
-
-        # Start threading and program
         self.videoLoop()
-        self.gui.mainloop()
+
 
     def recordVideo(self):
         """
@@ -116,6 +87,7 @@ class PoseRecorderApp:
         self.countdownText.pack(side='top', expand=True, padx=10)
         self.updateCountdown()
 
+
     def updateCountdown(self):
         """
         Function to update the countdown in the UI during recording
@@ -127,6 +99,7 @@ class PoseRecorderApp:
 
             if remainingTime > 0:
                 self.gui.after(1000, self.updateCountdown)
+
 
     def videoLoop(self):
         ret, frame = self.cap.read()
@@ -148,7 +121,7 @@ class PoseRecorderApp:
                 smoothedPoints[idx] = (cx, cy)
                 cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
 
-            for connection in self.POSE_CONNECTIONS:
+            for connection in self.poseConnections:
                 startIdx, endIdx = connection
                 if startIdx in smoothedPoints and endIdx in smoothedPoints:
                     pt1 = smoothedPoints[startIdx]
@@ -190,6 +163,7 @@ class PoseRecorderApp:
         """
         return np.linalg.norm(np.array(p1) - np.array(p2))
 
+
     def smoothLandmark(self, idx, newPoint):
         """
         Attempts to smooth node updates to be less jittery
@@ -204,6 +178,7 @@ class PoseRecorderApp:
                 self.prevLandmarks[idx] = newPoint
 
         return tuple(self.prevLandmarks[idx].astype(int))
+
 
     def saveToFolder(self, label):
 
@@ -223,8 +198,10 @@ class PoseRecorderApp:
         self.textFrameText.config(text='Select an option:')
         self.lastFilename = None
 
+
     def saveGood(self):
         self.saveToFolder('good')
+
 
     def saveBad(self):
         self.saveToFolder('bad')

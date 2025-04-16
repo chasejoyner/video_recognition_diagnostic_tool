@@ -1,0 +1,50 @@
+LANDMARKS_DICTIONARY:
+  0: 'Nose'
+  1: 'Left eye [inner['
+  2: 'Left eye'
+  3: 'Left eye [outer['
+  4: 'Right eye [inner['
+  5: 'Right eye'
+  6: 'Right eye [outer['
+  7: 'Left ear'
+  8: 'Right ear'
+  9: 'Mouth [left['
+  10: 'Mouth [right['
+  11: 'Left shoulder'
+  12: 'Right shoulder'
+  13: 'Left elbow'
+  14: 'Right elbow'
+  15: 'Left wrist'
+  16: 'Right wrist'
+  17: 'Left pinky'
+  18: 'Right pinky'
+  19: 'Left index'
+  20: 'Right index'
+  21: 'Left thumb'
+  22: 'Right thumb'
+  23: 'Left hip'
+  24: 'Right hip'
+  25: 'Left knee'
+  26: 'Right knee'
+  27: 'Left ankle'
+  28: 'Right ankle'
+  29: 'Left heel'
+  30: 'Right heel'
+  31: 'Left foot index'
+  32: 'Right foot index'
+
+POSE_CONNECTIONS:
+  - [8, 7]
+  - [10, 9]
+  - [16, 14]
+  - [14, 12]
+  - [15, 13]
+  - [13, 11]
+  - [12, 11]
+  - [11, 23]
+  - [23, 24]
+  - [24, 12]
+  - [24, 26]
+  - [26, 28]
+  - [23, 25]
+  - [25, 27]
