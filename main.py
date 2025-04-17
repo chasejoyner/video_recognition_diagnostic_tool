@@ -58,10 +58,13 @@ class PoseRecorderApp(PoseGUIApp):
         self.frameHeight = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fourcc = cv2.VideoWriter_fourcc(*'XVID')
         self.usedLandmarkIndices = set(c for pc in self.poseConnections for c in pc)
+
+        # Run variables
         self.recording = False
         self.out = None
         self.startTime = 0
         self.lastFilename = None
+        self.userData = {}
 
 
     def recordVideo(self):
