@@ -1,5 +1,5 @@
 pandas==2.2.3
-numpy==2.0.2
+numpy==1.22.4
 opencv-python==4.11.0.86
 mediapipe==0.10.21
 pillow==11.1.0
