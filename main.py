@@ -1,9 +1,11 @@
+import datetime
 import os
 import time
 import yaml
 import shutil
 import logging
 import numpy as np
+from datetime import datetime
 
 import cv2
 import mediapipe as mp
@@ -59,11 +61,17 @@ class PoseRecorderApp(PoseGUIApp):
         self.fourcc = cv2.VideoWriter_fourcc(*'XVID')
         self.usedLandmarkIndices = set(c for pc in self.poseConnections for c in pc)
 
+        # Add button commands
+        self.btnRecord.config(command=self.recordVideo)
+        self.btnGood.config(command=self.saveGood)
+        self.btnBad.config(command=self.saveBad)
+
         # Run variables
         self.recording = False
         self.out = None
         self.startTime = 0
         self.lastFilename = None
+        self.currentPoseData = {n: [] for n in self.nodes}
         self.userData = {}
 
 
@@ -114,6 +122,8 @@ class PoseRecorderApp(PoseGUIApp):
             smoothedPoints = {}
             for idx in self.usedLandmarkIndices:
                 landmark = results.pose_landmarks.landmark[idx]
+                if self.recording:
+                    self.currentPoseData[idx].append((self.selectedOption.get(), landmark.x, landmark.y))
                 h, w, _ = frame.shape
                 rawX, rawY = landmark.x * w, landmark.y * h
                 cx, cy = self.smoothLandmark(idx, (rawX, rawY))
@@ -141,6 +151,27 @@ class PoseRecorderApp(PoseGUIApp):
                 self.textFrameText.pack()
                 self.btnGood.pack(side='left', expand=True, padx=10)
                 self.btnBad.pack(side='left', expand=True, padx=10)
+                self.userData[self.selectedOption.get()] = [1]
+                import pandas as pd
+                df = pd.DataFrame.from_dict(self.currentPoseData)
+                df.columns = [self.landmarkDictionary.get(col, 'Unknown node') for col in df.columns]
+                df['timestamp'] = datetime.now()
+                df.to_csv(r'C:\Users\chase\PycharmProjects\video_recognition_diagnostic_tool\mydata.csv', index=False)
+
+            # import matplotlib.pyplot as plt
+            # # coords = df.iloc[79].to_list()
+            # coords = df['Left wrist'][1:].to_list()
+            # x_coords = [c[0] for c in coords]
+            # y_coords = [c[1] for c in coords]
+            # colors = ['red' if n == 'Right wrist' else 'blue' if n == 'Left wrist' else 'green' for n in df.columns]
+            # plt.figure(figsize=(6, 8))
+            # # plt.scatter(x_coords, y_coords, color=colors)
+            # plt.scatter(x_coords, y_coords)
+            # plt.xlim((0, 1))
+            # plt.ylim((0, 1))
+            # plt.gca().invert_yaxis()
+            # plt.gca().invert_xaxis()
+            # plt.savefig(r'C:\Users\chase\PycharmProjects\video_recognition_diagnostic_tool\myplot.png')
 
         # Dynamically resize video to fit the video section frame
         labelWidth = self.videoSection.winfo_width()
