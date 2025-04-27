@@ -1,11 +1,12 @@
-import datetime
 import os
 import time
 import yaml
 import shutil
 import logging
 import numpy as np
+import pandas as pd
 from datetime import datetime
+import matplotlib.pyplot as plt
 
 import cv2
 import mediapipe as mp
@@ -31,9 +32,14 @@ class PoseRecorderApp(PoseGUIApp):
     recordingLength: integer for how long each recording should be
     nodeUpdateThreshold: integer specifying the euclidean distance a node should move before updating frame
     fps: integer specifying the frames per second for recording
+    interpolate: boolean to interpolate missing (None) values in self.currentPoseData for each node
     """
 
-    def __init__(self, recordingLength=5, nodeUpdateThreshold=10, fps=20):
+    def __init__(self, 
+                 recordingLength=5, 
+                 nodeUpdateThreshold=10, 
+                 fps=20,
+                 interpolate=False):
 
         super().__init__()
 
@@ -72,7 +78,7 @@ class PoseRecorderApp(PoseGUIApp):
         self.startTime = 0
         self.lastFilename = None
         self.currentPoseData = {n: [] for n in self.nodes}
-        self.userData = {}
+        self.userData = {}  # Will store pose data by username: {username: {node_id: [(x1,y1), (x2,y2), ...]}}
 
 
     def recordVideo(self):
@@ -92,6 +98,9 @@ class PoseRecorderApp(PoseGUIApp):
         self.btnGood.pack_forget()
         self.btnBad.pack_forget()
         self.countdownText.pack(side='top', expand=True, padx=10)
+        self.num_frames = int(self.fps * (self.recordingLength - 1))
+        self.frame_counter = 0
+        self.currentPoseData = {n: [None] * self.num_frames for n in self.nodes}
         self.updateCountdown()
 
 
@@ -122,13 +131,13 @@ class PoseRecorderApp(PoseGUIApp):
             smoothedPoints = {}
             for idx in self.usedLandmarkIndices:
                 landmark = results.pose_landmarks.landmark[idx]
-                if self.recording:
-                    self.currentPoseData[idx].append((self.selectedOption.get(), landmark.x, landmark.y))
                 h, w, _ = frame.shape
                 rawX, rawY = landmark.x * w, landmark.y * h
                 cx, cy = self.smoothLandmark(idx, (rawX, rawY))
                 smoothedPoints[idx] = (cx, cy)
                 cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
+                if self.recording and self.frame_counter < self.num_frames:
+                    self.currentPoseData[idx][self.frame_counter] = (landmark.x, landmark.y)
 
             for connection in self.poseConnections:
                 startIdx, endIdx = connection
@@ -140,8 +149,10 @@ class PoseRecorderApp(PoseGUIApp):
         # Record video
         if self.recording and self.out:
             self.out.write(frame)
+            if self.frame_counter < self.num_frames:
+                self.frame_counter += 1
             elapsed = time.time() - self.startTime
-            if elapsed >= self.recordingLength:
+            if elapsed >= self.recordingLength or self.frame_counter >= self.num_frames:
                 self.recording = False
                 self.out.release()
                 self.out = None
@@ -151,28 +162,23 @@ class PoseRecorderApp(PoseGUIApp):
                 self.textFrameText.pack()
                 self.btnGood.pack(side='left', expand=True, padx=10)
                 self.btnBad.pack(side='left', expand=True, padx=10)
-                self.userData[self.selectedOption.get()] = [1]
-                import pandas as pd
+                
+                # Interpolate pose data to fill in dropped frames
+                if self.interpolate:
+                    self.interpolate_pose_data()
+                
+                current_user = self.selectedOption.get()
+                if current_user not in self.userData:
+                    self.userData[current_user] = []
                 df = pd.DataFrame.from_dict(self.currentPoseData)
                 df.columns = [self.landmarkDictionary.get(col, 'Unknown node') for col in df.columns]
                 df['timestamp'] = datetime.now()
-                df.to_csv(r'C:\Users\chase\PycharmProjects\video_recognition_diagnostic_tool\mydata.csv', index=False)
-
-            # import matplotlib.pyplot as plt
-            # # coords = df.iloc[79].to_list()
-            # coords = df['Left wrist'][1:].to_list()
-            # x_coords = [c[0] for c in coords]
-            # y_coords = [c[1] for c in coords]
-            # colors = ['red' if n == 'Right wrist' else 'blue' if n == 'Left wrist' else 'green' for n in df.columns]
-            # plt.figure(figsize=(6, 8))
-            # # plt.scatter(x_coords, y_coords, color=colors)
-            # plt.scatter(x_coords, y_coords)
-            # plt.xlim((0, 1))
-            # plt.ylim((0, 1))
-            # plt.gca().invert_yaxis()
-            # plt.gca().invert_xaxis()
-            # plt.savefig(r'C:\Users\chase\PycharmProjects\video_recognition_diagnostic_tool\myplot.png')
-
+                self.userData[current_user].append(df)
+                # Reset current pose data for next recording
+                self.currentPoseData = {n: [] for n in self.nodes}
+                if len(self.userData[current_user]) == 3:
+                    self.plot_wrist_trajectories(current_user)
+            
         # Dynamically resize video to fit the video section frame
         labelWidth = self.videoSection.winfo_width()
         labelHeight = self.videoSection.winfo_height()
@@ -235,6 +241,62 @@ class PoseRecorderApp(PoseGUIApp):
     def run(self):
         self.videoLoop()
         self.gui.mainloop()
+
+
+    def plot_wrist_trajectories(self, username):
+        """Plot all wrist trajectories and their average for a user"""
+        plt.figure(figsize=(12, 8))
+        # import pickle
+        # with open('trajectories.pkl', 'rb') as f:
+        #     self.userData[username] = pickle.load(f)
+        
+        # Extract x,y coordinates from each recording's Right wrist column
+        wrist_trajectories = []
+        for df in self.userData[username]:
+            # Each point in Right wrist column is a tuple of (x,y)
+            trajectory = np.array(df['Right wrist'].tolist())
+            wrist_trajectories.append(trajectory)
+            # Plot individual trajectory
+            plt.scatter(trajectory[1:-1, 0], trajectory[1:-1, 1], color='black', zorder=1)
+            plt.scatter(trajectory[0, 0], trajectory[0, 1], color='purple', label='Start', zorder=2)
+            plt.scatter(trajectory[-1, 0], trajectory[-1, 1], color='green', label='End', zorder=2)
+
+        # Calculate and plot average trajectory
+        wrist_trajectories = np.array(wrist_trajectories)
+        avg_trajectory = np.mean(wrist_trajectories, axis=0)
+        plt.plot(avg_trajectory[:, 0], avg_trajectory[:, 1], 'r-', linewidth=2, label='Average Trajectory', zorder=3)
+
+        # Customize plot
+        plt.title(f'Right Wrist Trajectories for {username}')
+        plt.xlabel('X Coordinate')
+        plt.ylabel('Y Coordinate')
+        plt.xlim((0, 1))
+        plt.ylim((0, 1))
+        plt.gca().invert_yaxis()
+        plt.legend()
+        plt.grid(True)
+        
+        # Save plot
+        os.makedirs('plots', exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        plt.savefig(f'plots/wrist_trajectory_{username}_{timestamp}.png')
+        plt.close()
+        
+        logger.info(f'Saved wrist trajectory plot for {username}')
+
+
+    def interpolate_pose_data(self):
+        """Interpolate missing (None) values in self.currentPoseData for each node."""
+        for node, coords in self.currentPoseData.items():
+            coords_arr = np.array([c if c is not None else (np.nan, np.nan) for c in coords], dtype=float)
+            # Interpolate x and y separately
+            for dim in [0, 1]:
+                arr = coords_arr[:, dim]
+                nans = np.isnan(arr)
+                if np.any(~nans):
+                    arr[nans] = np.interp(np.flatnonzero(nans), np.flatnonzero(~nans), arr[~nans])
+                coords_arr[:, dim] = arr
+            self.currentPoseData[node] = [tuple(xy) for xy in coords_arr]
 
 
 if __name__ == '__main__':
