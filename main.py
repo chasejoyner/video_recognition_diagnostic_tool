@@ -8,6 +8,7 @@ import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 import cv2
 import mediapipe as mp
@@ -56,6 +57,18 @@ class PoseRecorderApp(PoseGUIApp):
         self.landmarkDictionary = data['LANDMARKS_DICTIONARY']
         self.poseConnections = [tuple(pc) for pc in data['POSE_CONNECTIONS']]
         self.nodes = [n for pc in self.poseConnections for n in pc]
+
+        # Only allow node names that appear in pose_connections
+        node_names = [self.landmarkDictionary[n] for n in self.nodes if n in self.landmarkDictionary]
+        # Remove duplicates while preserving order
+        seen = set()
+        filtered_node_names = [x for x in node_names if not (x in seen or seen.add(x))]
+        if filtered_node_names:
+            self.selectedNode.set(filtered_node_names[0])
+        # Add trace to node selection
+        self.selectedNode.trace_add('write', self.on_node_change)
+        # Add trace to user selection
+        self.selectedOption.trace_add('write', self.on_user_change)
 
         # Initialize pose and recording objects
         self.mpPose = mp.solutions.pose
@@ -179,7 +192,12 @@ class PoseRecorderApp(PoseGUIApp):
                 # Reset current pose data for next recording
                 self.currentPoseData = {n: [] for n in self.nodes}
                 if len(self.userData[current_user]) >= 0:
-                    self.plot_trajectories(current_user, nodeName='Right wrist')
+                    self.plot_trajectories(current_user, nodeName=self.selectedNode.get())
+            
+            # Hide the plot after labeling
+            if hasattr(self, 'plot_canvas') and self.plot_canvas is not None:
+                self.plot_canvas.get_tk_widget().destroy()
+                self.plot_canvas = None
             
         # Dynamically resize video to fit the video section frame
         labelWidth = self.videoSection.winfo_width()
@@ -245,10 +263,17 @@ class PoseRecorderApp(PoseGUIApp):
         self.gui.mainloop()
 
 
-    def plot_trajectories(self, username, nodeName):
-        """Plot all wrist trajectories and their average for a user, centered only (no scaling)."""
-        plt.figure(figsize=(12, 8))
-        # Extract x,y coordinates from each recording's Right wrist column
+    def plot_trajectories(self, username, nodeName, parent_frame=None):
+        """Plot all trajectories and their average for a user, centered only (no scaling), and display in the UI."""
+        if parent_frame is None:
+            parent_frame = self.plotFrame
+        # Clear previous plot if it exists
+        if hasattr(self, 'plot_canvas') and self.plot_canvas is not None:
+            self.plot_canvas.get_tk_widget().destroy()
+            self.plot_canvas = None
+        # Create a new figure
+        fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+        # Extract x,y coordinates from each recording's node column
         trajectories = []
         for df in self.userData[username]:
             trajectory = np.array(df[nodeName].tolist())
@@ -263,9 +288,9 @@ class PoseRecorderApp(PoseGUIApp):
                 for point in trajectory
             ], dtype=np.float32)
             trajectories.append(centered_trajectory)
-            plt.scatter(centered_trajectory[1:-1, 0], centered_trajectory[1:-1, 1], color='black', zorder=1)
-            plt.scatter(centered_trajectory[0, 0], centered_trajectory[0, 1], color='purple', zorder=2)
-            plt.scatter(centered_trajectory[-1, 0], centered_trajectory[-1, 1], color='green', zorder=2)
+            ax.scatter(centered_trajectory[1:-1, 0], centered_trajectory[1:-1, 1], color='black', zorder=1)
+            ax.scatter(centered_trajectory[0, 0], centered_trajectory[0, 1], color='purple', zorder=2)
+            ax.scatter(centered_trajectory[-1, 0], centered_trajectory[-1, 1], color='green', zorder=2)
 
         # Calculate and plot average trajectory
         trajectories = np.array(trajectories, dtype=np.float32)
@@ -276,30 +301,28 @@ class PoseRecorderApp(PoseGUIApp):
             else:
                 avg_trajectory.append(np.nanmean(trajectories[:, i, :], axis=0))
         avg_trajectory = np.array(avg_trajectory)
-        plt.plot(avg_trajectory[:, 0], avg_trajectory[:, 1], 'r-', linewidth=2, label='Average Trajectory', zorder=4)
+        ax.plot(avg_trajectory[:, 0], avg_trajectory[:, 1], 'r-', linewidth=2, label='Average Trajectory', zorder=4)
 
-        plt.title(f'Trajectories for {nodeName} for user {username}')
-        plt.xlabel('')
-        plt.ylabel('')
-        plt.xticks([])
-        plt.yticks([])
-        plt.xlim((-1, 1))
-        plt.ylim((0, 1))
-        plt.gca().invert_yaxis()
+        ax.set_title(f'Trajectories for {nodeName} for user {username}')
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlim((-1, 1))
+        ax.set_ylim((0, 1))
+        ax.invert_yaxis()
         custom_handles = [
             Line2D([0], [0], marker='o', color='w', markerfacecolor='purple', markersize=10, label='Start'),
             Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=10, label='Finish')
         ]
-
-        plt.legend(handles=custom_handles + plt.gca().get_legend_handles_labels()[0])
-        plt.grid(True)
-        
-        # Save plot
-        os.makedirs('plots', exist_ok=True)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        plt.savefig(f'plots/wrist_trajectory_{username}_{timestamp}.png')
-        plt.close()
-        logger.info(f'Saved centered wrist trajectory plot for {username}')
+        ax.legend(handles=custom_handles + ax.get_legend_handles_labels()[0])
+        ax.grid(True)
+        # Embed the plot in the specified Tkinter UI frame
+        self.plot_canvas = FigureCanvasTkAgg(fig, master=parent_frame)
+        self.plot_canvas.draw()
+        self.plot_canvas.get_tk_widget().pack(fill='both', expand=True)
+        plt.close(fig)
+        logger.info(f'Displayed centered wrist trajectory plot for {username} in UI')
 
 
     def interpolate_pose_data(self):
@@ -314,6 +337,52 @@ class PoseRecorderApp(PoseGUIApp):
                     arr[nans] = np.interp(np.flatnonzero(nans), np.flatnonzero(~nans), arr[~nans])
                 coords_arr[:, dim] = arr
             self.currentPoseData[node] = [tuple(xy) for xy in coords_arr]
+
+
+    def on_node_change(self, *args):
+        current_user = self.selectedOption.get()
+        if current_user in self.userData and len(self.userData[current_user]) > 0:
+            self.plot_trajectories(current_user, nodeName=self.selectedNode.get(), parent_frame=self.plotFrame)
+
+
+    def on_user_change(self, *args):
+        current_user = self.selectedOption.get()
+        if current_user in self.userData and len(self.userData[current_user]) > 0:
+            self.plot_trajectories(current_user, nodeName=self.selectedNode.get(), parent_frame=self.plotFrame)
+
+
+    def show_analysis_frame(self):
+        # Hide video and plot frames
+        self.videoFrame.pack_forget()
+        self.plotFrame.pack_forget()
+        # Populate analysis node dropdown with available nodes
+        node_names = [self.landmarkDictionary[n] for n in self.nodes if n in self.landmarkDictionary]
+        seen = set()
+        filtered_node_names = [x for x in node_names if not (x in seen or seen.add(x))]
+        if filtered_node_names:
+            self.analysisNodeVar.set(filtered_node_names[0])
+            menu = self.analysisNodeDropdown['menu']
+            menu.delete(0, 'end')
+            for name in filtered_node_names:
+                menu.add_command(label=name, command=lambda value=name: self.analysisNodeVar.set(value))
+        # Set up plot and home button commands
+        self.plotButton.config(command=self.plot_analysis)
+        self.homeButton.config(command=self.show_home_frame)
+        # Show analysis frame
+        self.analysisFrame.pack(fill='both', expand=True, padx=10, pady=10)
+
+    def show_home_frame(self):
+        # Hide analysis frame
+        self.analysisFrame.pack_forget()
+        # Show video and plot frames
+        self.videoFrame.pack(side='top', fill='both', expand=True)
+        self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)
+
+    def plot_analysis(self):
+        current_user = self.selectedOption.get()
+        node_name = self.analysisNodeVar.get()
+        if current_user in self.userData and len(self.userData[current_user]) > 0:
+            self.plot_trajectories(current_user, nodeName=node_name, parent_frame=self.analysisFrame)
 
 
 if __name__ == '__main__':
