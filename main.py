@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 import cv2
 import mediapipe as mp
@@ -38,7 +39,7 @@ class PoseRecorderApp(PoseGUIApp):
     def __init__(self, 
                  recordingLength=5, 
                  nodeUpdateThreshold=10, 
-                 fps=20,
+                 fps=30,
                  interpolate=False):
 
         super().__init__()
@@ -47,6 +48,7 @@ class PoseRecorderApp(PoseGUIApp):
         self.recordingLength = recordingLength
         self.nodeUpdateThreshold = nodeUpdateThreshold
         self.fps = fps
+        self.interpolate = interpolate
 
         # Extract yaml contents
         with open('settings.yaml', 'r') as file:
@@ -100,7 +102,7 @@ class PoseRecorderApp(PoseGUIApp):
         self.countdownText.pack(side='top', expand=True, padx=10)
         self.num_frames = int(self.fps * (self.recordingLength - 1))
         self.frame_counter = 0
-        self.currentPoseData = {n: [None] * self.num_frames for n in self.nodes}
+        self.currentPoseData = {n: [(None, None)] * self.num_frames for n in self.nodes}
         self.updateCountdown()
 
 
@@ -176,8 +178,8 @@ class PoseRecorderApp(PoseGUIApp):
                 self.userData[current_user].append(df)
                 # Reset current pose data for next recording
                 self.currentPoseData = {n: [] for n in self.nodes}
-                if len(self.userData[current_user]) == 3:
-                    self.plot_wrist_trajectories(current_user)
+                if len(self.userData[current_user]) >= 0:
+                    self.plot_trajectories(current_user, nodeName='Right wrist')
             
         # Dynamically resize video to fit the video section frame
         labelWidth = self.videoSection.winfo_width()
@@ -243,37 +245,53 @@ class PoseRecorderApp(PoseGUIApp):
         self.gui.mainloop()
 
 
-    def plot_wrist_trajectories(self, username):
-        """Plot all wrist trajectories and their average for a user"""
+    def plot_trajectories(self, username, nodeName):
+        """Plot all wrist trajectories and their average for a user, centered only (no scaling)."""
         plt.figure(figsize=(12, 8))
-        # import pickle
-        # with open('trajectories.pkl', 'rb') as f:
-        #     self.userData[username] = pickle.load(f)
-        
         # Extract x,y coordinates from each recording's Right wrist column
-        wrist_trajectories = []
+        trajectories = []
         for df in self.userData[username]:
-            # Each point in Right wrist column is a tuple of (x,y)
-            trajectory = np.array(df['Right wrist'].tolist())
-            wrist_trajectories.append(trajectory)
-            # Plot individual trajectory
-            plt.scatter(trajectory[1:-1, 0], trajectory[1:-1, 1], color='black', zorder=1)
-            plt.scatter(trajectory[0, 0], trajectory[0, 1], color='purple', label='Start', zorder=2)
-            plt.scatter(trajectory[-1, 0], trajectory[-1, 1], color='green', label='End', zorder=2)
+            trajectory = np.array(df[nodeName].tolist())
+            # Horizontal center the trajectory so the first point is at the origin
+            first_frame = [t for t in trajectory if t[0] is not None and t[1] is not None]
+            first_frame = first_frame[0] if first_frame else [None, None]
+            centered_trajectory = np.array([
+                [
+                    point[0] - first_frame[0] if point[0] is not None else None,
+                    point[1]
+                ]
+                for point in trajectory
+            ], dtype=np.float32)
+            trajectories.append(centered_trajectory)
+            plt.scatter(centered_trajectory[1:-1, 0], centered_trajectory[1:-1, 1], color='black', zorder=1)
+            plt.scatter(centered_trajectory[0, 0], centered_trajectory[0, 1], color='purple', zorder=2)
+            plt.scatter(centered_trajectory[-1, 0], centered_trajectory[-1, 1], color='green', zorder=2)
 
         # Calculate and plot average trajectory
-        wrist_trajectories = np.array(wrist_trajectories)
-        avg_trajectory = np.mean(wrist_trajectories, axis=0)
-        plt.plot(avg_trajectory[:, 0], avg_trajectory[:, 1], 'r-', linewidth=2, label='Average Trajectory', zorder=3)
+        trajectories = np.array(trajectories, dtype=np.float32)
+        avg_trajectory = []
+        for i in range(trajectories.shape[1]):
+            if np.all(np.isnan(trajectories[:, i, :])):
+                avg_trajectory.append([None, None])
+            else:
+                avg_trajectory.append(np.nanmean(trajectories[:, i, :], axis=0))
+        avg_trajectory = np.array(avg_trajectory)
+        plt.plot(avg_trajectory[:, 0], avg_trajectory[:, 1], 'r-', linewidth=2, label='Average Trajectory', zorder=4)
 
-        # Customize plot
-        plt.title(f'Right Wrist Trajectories for {username}')
-        plt.xlabel('X Coordinate')
-        plt.ylabel('Y Coordinate')
-        plt.xlim((0, 1))
+        plt.title(f'Trajectories for {nodeName} for user {username}')
+        plt.xlabel('')
+        plt.ylabel('')
+        plt.xticks([])
+        plt.yticks([])
+        plt.xlim((-1, 1))
         plt.ylim((0, 1))
         plt.gca().invert_yaxis()
-        plt.legend()
+        custom_handles = [
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='purple', markersize=10, label='Start'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=10, label='Finish')
+        ]
+
+        plt.legend(handles=custom_handles + plt.gca().get_legend_handles_labels()[0])
         plt.grid(True)
         
         # Save plot
@@ -281,8 +299,7 @@ class PoseRecorderApp(PoseGUIApp):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         plt.savefig(f'plots/wrist_trajectory_{username}_{timestamp}.png')
         plt.close()
-        
-        logger.info(f'Saved wrist trajectory plot for {username}')
+        logger.info(f'Saved centered wrist trajectory plot for {username}')
 
 
     def interpolate_pose_data(self):
