@@ -32,10 +32,6 @@ class PoseGUIApp:
         # Node selection dropdown (to be populated in PoseRecorderApp)
         self.selectedNode = tk.StringVar()
 
-        # Add Analyze button to the top right
-        self.analyzeButton = tk.Button(self.gui, text='Analyze', font=('Arial', 12), command=self.show_analysis_frame)
-        self.analyzeButton.place(relx=1.0, x=-10, y=10, anchor='ne')
-
         # Frame to hold analysis plot
         self.plotFrame = tk.Frame(self.gui, bg='#1e1e1e')
         self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)
@@ -69,6 +65,10 @@ class PoseGUIApp:
         self.btnGood = tk.Button(self.buttonFrame, text='Good', font=('Arial', 14), width=20)
         self.btnBad = tk.Button(self.buttonFrame, text='Bad', font=('Arial', 14), width=20)
         self.countdownText = tk.Label(self.buttonFrame, font=('Arial', 14), fg='white', bg='#1e1e1e')
+
+        # Add Analyze button to the top right
+        self.analyzeButton = tk.Button(self.gui, text='Analyze', font=('Arial', 12))
+        self.analyzeButton.place(relx=1.0, x=-10, y=10, anchor='ne')
 
         # Add tracing to selected user
         self.selectedOption.trace_add('write', self.handleSelection)

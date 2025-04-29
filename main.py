@@ -64,8 +64,12 @@ class PoseRecorderApp(PoseGUIApp):
         filtered_node_names = [x for x in node_names if not (x in seen or seen.add(x))]
         if filtered_node_names:
             self.selectedNode.set(filtered_node_names[0])
+
+        # Add traces
         self.selectedNode.trace_add('write', self.on_node_change)
         self.selectedOption.trace_add('write', self.on_user_change)
+        self.analysisNodeVar.trace_add('write', self.plot_analysis)
+        self.selectedOption.trace_add('write', self.plot_analysis)
 
         # Initialize pose and recording objects
         self.mpPose = mp.solutions.pose
@@ -83,6 +87,7 @@ class PoseRecorderApp(PoseGUIApp):
         self.btnRecord.config(command=self.recordVideo)
         self.btnGood.config(command=self.saveGood)
         self.btnBad.config(command=self.saveBad)
+        self.analyzeButton.config(command=self.show_analysis_frame)
 
         # Run variables
         self.recording = False
@@ -256,10 +261,121 @@ class PoseRecorderApp(PoseGUIApp):
         self.saveToFolder('bad')
 
 
+    def interpolate_pose_data(self):
+        """
+        Interpolate missing (None) values in self.currentPoseData for each node
+        """
+        logger.info('Interpolating pose data')
+        for node, coords in self.currentPoseData.items():
+            coords_arr = np.array([c if c is not None else (np.nan, np.nan) for c in coords], dtype=float)
+            # Interpolate x and y separately
+            for dim in [0, 1]:
+                arr = coords_arr[:, dim]
+                nans = np.isnan(arr)
+                if np.any(~nans):
+                    arr[nans] = np.interp(np.flatnonzero(nans), np.flatnonzero(~nans), arr[~nans])
+                coords_arr[:, dim] = arr
+            self.currentPoseData[node] = [tuple(xy) for xy in coords_arr]
+
+
+    def on_node_change(self, *args):
+        """
+        Update the plot when the node is changed
+        """
+        current_user = self.selectedOption.get()
+        current_node = self.selectedNode.get()
+        logger.info(f'Node changed to {current_node}')
+        if self.analysisFrame.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
+            self.plot_trajectories(current_user, nodeName=current_node, parent_frame=self.plotFrame)
+
+
+    def on_user_change(self, *args):
+        """
+        Update the plot when the user is changed
+        """
+        current_user = self.selectedOption.get()
+        logger.info(f'User changed to {current_user}')
+        if self.analysisFrame.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
+            self.plot_trajectories(current_user, nodeName=self.selectedNode.get(), parent_frame=self.plotFrame)
+
+
+    def show_analysis_frame(self):
+        """
+        Show the analysis frame of the UI
+        """
+        logger.info('Showing analysis frame')
+        self.videoFrame.pack_forget()
+        self.plotFrame.pack_forget()
+        self.textFrame.pack_forget()
+        self.buttonFrame.pack_forget()
+        self.analyzeButton.config(text='Home', command=self.show_home_frame)
+
+        node_names = [self.landmarkDictionary[n] for n in self.nodes if n in self.landmarkDictionary]
+        seen = set()
+        filtered_node_names = [x for x in node_names if not (x in seen or seen.add(x))]
+        # Add node names to analysis node dropdown
+        if filtered_node_names:
+            self.analysisNodeVar.set(filtered_node_names[0])
+            menu = self.analysisNodeDropdown['menu']
+            menu.delete(0, 'end')
+            for name in filtered_node_names:
+                menu.add_command(label=name, command=lambda value=name: self.analysisNodeVar.set(value))
+
+        # Build analysis frame
+        self.analysisFrame.pack(fill='both', expand=True, padx=10, pady=10)
+        if filtered_node_names:
+            self.analysisNodeVar.set(filtered_node_names[0])
+
+
+    def show_home_frame(self):
+        """
+        Show the home frame of the UI
+        """
+        logger.info('Showing home frame')
+        self.analysisFrame.pack_forget()
+        self.plotFrame.pack_forget()  # Hide plot frame first
+        self.analyzeButton.config(text='Analyze', command=self.show_analysis_frame)
+        # Show video and plot frames
+        self.videoFrame.pack(side='top', fill='both', expand=True)
+        self.videoFrame.pack_propagate(False)  # Ensure video frame maintains its size
+        self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)  # Show plot frame again
+        self.textFrame.pack(fill='x', pady=0)  # Show text frame in home view
+        self.buttonFrame.pack(side='bottom', fill='x', pady=10)  # Show button frame in home view
+
+
+    def plot_analysis(self, *args):
+        """
+        Main function to plot trajectories for a user and node when analyze button is clicked
+        """
+        logger.info('Plotting analysis')
+        # Clear any existing plot
+        if hasattr(self, 'plot_canvas') and self.plot_canvas is not None:
+            self.plot_canvas.get_tk_widget().destroy()
+            self.plot_canvas = None
+
+        current_user = self.selectedOption.get()
+        node_name = self.analysisNodeVar.get()
+        if current_user in self.userData and len(self.userData[current_user]) > 0:
+            self.plot_trajectories(current_user, nodeName=node_name, parent_frame=self.analysisFrame)
+        else:
+            # Create a blank plot with a message if no data exists
+            fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+            ax.text(0.5, 0.5, f'No data available for {current_user}', 
+                   horizontalalignment='center', verticalalignment='center',
+                   transform=ax.transAxes)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            self.plot_canvas = FigureCanvasTkAgg(fig, master=self.analysisFrame)
+            self.plot_canvas.draw()
+            self.plot_canvas.get_tk_widget().pack(fill='both', expand=True)
+            plt.close(fig)
+
+
     def plot_trajectories(self, username, nodeName, parent_frame=None):
         """
         Plot all trajectories and their average for a user
         """
+        logger.info(f'Plotting trajectories for user {username} and node {nodeName}')
         if parent_frame is None:
             parent_frame = self.plotFrame
         # Clear previous plot if it exists
@@ -318,123 +434,6 @@ class PoseRecorderApp(PoseGUIApp):
         self.plot_canvas.draw()
         self.plot_canvas.get_tk_widget().pack(fill='both', expand=True)
         plt.close(fig)
-        logger.info(f'Displayed trajectories plot for user {username} and node {nodeName} in UI')
-
-
-    def interpolate_pose_data(self):
-        """
-        Interpolate missing (None) values in self.currentPoseData for each node
-        """
-        for node, coords in self.currentPoseData.items():
-            coords_arr = np.array([c if c is not None else (np.nan, np.nan) for c in coords], dtype=float)
-            # Interpolate x and y separately
-            for dim in [0, 1]:
-                arr = coords_arr[:, dim]
-                nans = np.isnan(arr)
-                if np.any(~nans):
-                    arr[nans] = np.interp(np.flatnonzero(nans), np.flatnonzero(~nans), arr[~nans])
-                coords_arr[:, dim] = arr
-            self.currentPoseData[node] = [tuple(xy) for xy in coords_arr]
-
-
-    def on_node_change(self, *args):
-        """
-        Update the plot when the node is changed
-        """
-        current_user = self.selectedOption.get()
-        if current_user in self.userData and len(self.userData[current_user]) > 0:
-            self.plot_trajectories(current_user, nodeName=self.selectedNode.get(), parent_frame=self.plotFrame)
-
-
-    def on_user_change(self, *args):
-        """
-        Update the plot when the user is changed
-        """
-        current_user = self.selectedOption.get()
-        if current_user in self.userData and len(self.userData[current_user]) > 0:
-            self.plot_trajectories(current_user, nodeName=self.selectedNode.get(), parent_frame=self.plotFrame)
-
-
-    def show_analysis_frame(self):
-        """
-        Show the analysis frame of the UI
-        """
-        self.videoFrame.pack_forget()
-        self.plotFrame.pack_forget()
-        self.textFrame.pack_forget()
-        self.buttonFrame.pack_forget()
-        self.analyzeButton.config(text='Home', command=self.show_home_frame)
-
-        node_names = [self.landmarkDictionary[n] for n in self.nodes if n in self.landmarkDictionary]
-        seen = set()
-        filtered_node_names = [x for x in node_names if not (x in seen or seen.add(x))]
-        if filtered_node_names:
-            self.analysisNodeVar.set(filtered_node_names[0])
-            menu = self.analysisNodeDropdown['menu']
-            menu.delete(0, 'end')
-            for name in filtered_node_names:
-                menu.add_command(label=name, command=lambda value=name: self.analysisNodeVar.set(value))
-        
-        # Remove any existing traces before adding new ones
-        if hasattr(self, '_analysis_trace_ids'):
-            for trace_id in self._analysis_trace_ids:
-                self.analysisNodeVar.trace_remove('write', trace_id)
-            for trace_id in self._user_trace_ids:
-                self.selectedOption.trace_remove('write', trace_id)
-        
-        # Add traces to both node and user selection
-        self._analysis_trace_ids = []
-        self._user_trace_ids = []
-        self._analysis_trace_ids.append(self.analysisNodeVar.trace_add('write', self.plot_analysis))
-        self._user_trace_ids.append(self.selectedOption.trace_add('write', self.plot_analysis))
-
-        # Build analysis frame
-        self.analysisFrame.pack(fill='both', expand=True, padx=10, pady=10)
-        # Trigger initial plot by changing the node value (which will trigger the trace)
-        if filtered_node_names:
-            self.analysisNodeVar.set(filtered_node_names[0])
-
-
-    def show_home_frame(self):
-        """
-        Show the home frame of the UI
-        """
-        self.analysisFrame.pack_forget()
-        self.plotFrame.pack_forget()  # Hide plot frame first
-        self.analyzeButton.config(text='Analyze', command=self.show_analysis_frame)
-        # Show video and plot frames
-        self.videoFrame.pack(side='top', fill='both', expand=True)
-        self.videoFrame.pack_propagate(False)  # Ensure video frame maintains its size
-        self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)  # Show plot frame again
-        self.textFrame.pack(fill='x', pady=0)  # Show text frame in home view
-        self.buttonFrame.pack(side='bottom', fill='x', pady=10)  # Show button frame in home view
-
-
-    def plot_analysis(self, *args):
-        """
-        Main function to plot trajectories for a user and node when analyze button is clicked
-        """
-        # Clear any existing plot
-        if hasattr(self, 'plot_canvas') and self.plot_canvas is not None:
-            self.plot_canvas.get_tk_widget().destroy()
-            self.plot_canvas = None
-
-        current_user = self.selectedOption.get()
-        node_name = self.analysisNodeVar.get()
-        if current_user in self.userData and len(self.userData[current_user]) > 0:
-            self.plot_trajectories(current_user, nodeName=node_name, parent_frame=self.analysisFrame)
-        else:
-            # Create a blank plot with a message if no data exists
-            fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
-            ax.text(0.5, 0.5, f'No data available for {current_user}', 
-                   horizontalalignment='center', verticalalignment='center',
-                   transform=ax.transAxes)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            self.plot_canvas = FigureCanvasTkAgg(fig, master=self.analysisFrame)
-            self.plot_canvas.draw()
-            self.plot_canvas.get_tk_widget().pack(fill='both', expand=True)
-            plt.close(fig)
 
 
     def run(self):
