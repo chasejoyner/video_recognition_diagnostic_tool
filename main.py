@@ -60,14 +60,11 @@ class PoseRecorderApp(PoseGUIApp):
 
         # Only allow node names that appear in pose_connections
         node_names = [self.landmarkDictionary[n] for n in self.nodes if n in self.landmarkDictionary]
-        # Remove duplicates while preserving order
         seen = set()
         filtered_node_names = [x for x in node_names if not (x in seen or seen.add(x))]
         if filtered_node_names:
             self.selectedNode.set(filtered_node_names[0])
-        # Add trace to node selection
         self.selectedNode.trace_add('write', self.on_node_change)
-        # Add trace to user selection
         self.selectedOption.trace_add('write', self.on_user_change)
 
         # Initialize pose and recording objects
@@ -93,7 +90,7 @@ class PoseRecorderApp(PoseGUIApp):
         self.startTime = 0
         self.lastFilename = None
         self.currentPoseData = {n: [] for n in self.nodes}
-        self.userData = {}  # Will store pose data by username: {username: {node_id: [(x1,y1), (x2,y2), ...]}}
+        self.userData = {}
 
 
     def recordVideo(self):
@@ -133,6 +130,9 @@ class PoseRecorderApp(PoseGUIApp):
 
 
     def videoLoop(self):
+        """
+        Main loop to capture video and process landmarks
+        """
         ret, frame = self.cap.read()
         if not ret:
             self.gui.after(10, self.videoLoop)
@@ -264,20 +264,23 @@ class PoseRecorderApp(PoseGUIApp):
 
 
     def plot_trajectories(self, username, nodeName, parent_frame=None):
-        """Plot all trajectories and their average for a user, centered only (no scaling), and display in the UI."""
+        """
+        Plot all trajectories and their average for a user
+        """
         if parent_frame is None:
             parent_frame = self.plotFrame
         # Clear previous plot if it exists
         if hasattr(self, 'plot_canvas') and self.plot_canvas is not None:
             self.plot_canvas.get_tk_widget().destroy()
             self.plot_canvas = None
-        # Create a new figure
+
         fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
         # Extract x,y coordinates from each recording's node column
         trajectories = []
         for df in self.userData[username]:
             trajectory = np.array(df[nodeName].tolist())
             # Horizontal center the trajectory so the first point is at the origin
+            # Probably we will make ball the relative point to center around
             first_frame = [t for t in trajectory if t[0] is not None and t[1] is not None]
             first_frame = first_frame[0] if first_frame else [None, None]
             centered_trajectory = np.array([
@@ -317,16 +320,18 @@ class PoseRecorderApp(PoseGUIApp):
         ]
         ax.legend(handles=custom_handles + ax.get_legend_handles_labels()[0])
         ax.grid(True)
-        # Embed the plot in the specified Tkinter UI frame
+
         self.plot_canvas = FigureCanvasTkAgg(fig, master=parent_frame)
         self.plot_canvas.draw()
         self.plot_canvas.get_tk_widget().pack(fill='both', expand=True)
         plt.close(fig)
-        logger.info(f'Displayed centered wrist trajectory plot for {username} in UI')
+        logger.info(f'Displayed trajectories plot for user {username} and node {nodeName} in UI')
 
 
     def interpolate_pose_data(self):
-        """Interpolate missing (None) values in self.currentPoseData for each node."""
+        """
+        Interpolate missing (None) values in self.currentPoseData for each node
+        """
         for node, coords in self.currentPoseData.items():
             coords_arr = np.array([c if c is not None else (np.nan, np.nan) for c in coords], dtype=float)
             # Interpolate x and y separately
@@ -340,22 +345,31 @@ class PoseRecorderApp(PoseGUIApp):
 
 
     def on_node_change(self, *args):
+        """
+        Update the plot when the node is changed
+        """
         current_user = self.selectedOption.get()
         if current_user in self.userData and len(self.userData[current_user]) > 0:
             self.plot_trajectories(current_user, nodeName=self.selectedNode.get(), parent_frame=self.plotFrame)
 
 
     def on_user_change(self, *args):
+        """
+        Update the plot when the user is changed
+        """
         current_user = self.selectedOption.get()
         if current_user in self.userData and len(self.userData[current_user]) > 0:
             self.plot_trajectories(current_user, nodeName=self.selectedNode.get(), parent_frame=self.plotFrame)
 
 
     def show_analysis_frame(self):
-        # Hide video and plot frames
+        """
+        Show the analysis frame of the UI
+        """
         self.videoFrame.pack_forget()
         self.plotFrame.pack_forget()
-        # Populate analysis node dropdown with available nodes
+        self.analyzeButton.config(text='Home', command=self.show_home_frame)
+
         node_names = [self.landmarkDictionary[n] for n in self.nodes if n in self.landmarkDictionary]
         seen = set()
         filtered_node_names = [x for x in node_names if not (x in seen or seen.add(x))]
@@ -365,20 +379,29 @@ class PoseRecorderApp(PoseGUIApp):
             menu.delete(0, 'end')
             for name in filtered_node_names:
                 menu.add_command(label=name, command=lambda value=name: self.analysisNodeVar.set(value))
-        # Set up plot and home button commands
-        self.plotButton.config(command=self.plot_analysis)
-        self.homeButton.config(command=self.show_home_frame)
-        # Show analysis frame
+        
+        # Add trace to analysis node selection
+        self.analysisNodeVar.trace_add('write', self.plot_analysis)
+
+        # Build analysis frame and plot trajectories
         self.analysisFrame.pack(fill='both', expand=True, padx=10, pady=10)
+        self.plot_analysis()
+
 
     def show_home_frame(self):
-        # Hide analysis frame
+        """
+        Show the home frame of the UI
+        """
         self.analysisFrame.pack_forget()
-        # Show video and plot frames
+        self.analyzeButton.config(text='Analyze', command=self.show_analysis_frame)
         self.videoFrame.pack(side='top', fill='both', expand=True)
         self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)
+        
 
-    def plot_analysis(self):
+    def plot_analysis(self, *args):
+        """
+        Main function to plot trajectories for a user and node when analyze button is clicked
+        """
         current_user = self.selectedOption.get()
         node_name = self.analysisNodeVar.get()
         if current_user in self.userData and len(self.userData[current_user]) > 0:

@@ -31,14 +31,12 @@ class PoseGUIApp:
 
         # Node selection dropdown (to be populated in PoseRecorderApp)
         self.selectedNode = tk.StringVar()
-        # self.nodeDropdown = ttk.OptionMenu(self.gui, self.selectedNode, '')  # Remove from home screen
-        # self.nodeDropdown.pack(padx=10, pady=10)
 
         # Add Analyze button to the top right
         self.analyzeButton = tk.Button(self.gui, text='Analyze', font=('Arial', 12), command=self.show_analysis_frame)
         self.analyzeButton.place(relx=1.0, x=-10, y=10, anchor='ne')
 
-        # Frame to hold the plot
+        # Frame to hold analysis plot
         self.plotFrame = tk.Frame(self.gui, bg='#1e1e1e')
         self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)
 
@@ -49,15 +47,11 @@ class PoseGUIApp:
         self.videoSection = tk.Label(self.videoFrame)
         self.videoSection.pack(padx=10, pady=10, fill='both', expand=True)
 
-        # Analysis frame (hidden by default)
+        # Analysis frame which shows up when the analyze button is clicked
         self.analysisFrame = tk.Frame(self.gui, bg='#1e1e1e')
         self.analysisNodeVar = tk.StringVar()
         self.analysisNodeDropdown = ttk.OptionMenu(self.analysisFrame, self.analysisNodeVar, '')
         self.analysisNodeDropdown.pack(padx=10, pady=10)
-        self.plotButton = tk.Button(self.analysisFrame, text='Plot', font=('Arial', 12))
-        self.plotButton.pack(padx=10, pady=10)
-        self.homeButton = tk.Button(self.analysisFrame, text='Home', font=('Arial', 12))
-        self.homeButton.pack(padx=10, pady=10)
         self.analysisFrame.pack_forget()
 
         # Create text frame in middle row
@@ -96,6 +90,9 @@ class PoseGUIApp:
 
 
     def handleSelection(self, *args):
+        """
+        Handles the selection of a user from the dropdown menu and sets as selected user.
+        """
         selected_value = self.selectedOption.get()
         if selected_value == 'New user':
             while True:
