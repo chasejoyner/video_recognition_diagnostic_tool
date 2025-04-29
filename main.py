@@ -93,42 +93,6 @@ class PoseRecorderApp(PoseGUIApp):
         self.userData = {}
 
 
-    def recordVideo(self):
-        """
-        Function call to start recording a predetermined long video and save
-        """
-        if self.recording:
-            return
-        self.textFrameText.config(text='Recording:')
-        self.recording = True
-        self.startTime = time.time()
-        timestamp = time.strftime('%Y%m%d-%H%M%S')
-        self.lastFilename = f'pose_capture_{timestamp}.avi'
-        self.out = cv2.VideoWriter(self.lastFilename, self.fourcc, self.fps, (self.frameWidth, self.frameHeight))
-        logger.info('Started recording...')
-        self.btnRecord.pack_forget()
-        self.btnGood.pack_forget()
-        self.btnBad.pack_forget()
-        self.countdownText.pack(side='top', expand=True, padx=10)
-        self.num_frames = int(self.fps * (self.recordingLength - 1))
-        self.frame_counter = 0
-        self.currentPoseData = {n: [(None, None)] * self.num_frames for n in self.nodes}
-        self.updateCountdown()
-
-
-    def updateCountdown(self):
-        """
-        Function to update the countdown in the UI during recording
-        """
-        if self.recording:
-            elapsedTime = time.time() - self.startTime
-            remainingTime = max(0, self.recordingLength - int(elapsedTime))
-            self.countdownText.config(text=f'{remainingTime} sec')
-
-            if remainingTime > 0:
-                self.gui.after(1000, self.updateCountdown)
-
-
     def videoLoop(self):
         """
         Main loop to capture video and process landmarks
@@ -182,6 +146,7 @@ class PoseRecorderApp(PoseGUIApp):
                 if self.interpolate:
                     self.interpolate_pose_data()
                 
+                # Save pose data to user's data
                 current_user = self.selectedOption.get()
                 if current_user not in self.userData:
                     self.userData[current_user] = []
@@ -191,26 +156,59 @@ class PoseRecorderApp(PoseGUIApp):
                 self.userData[current_user].append(df)
                 # Reset current pose data for next recording
                 self.currentPoseData = {n: [] for n in self.nodes}
-                if len(self.userData[current_user]) >= 0:
-                    self.plot_trajectories(current_user, nodeName=self.selectedNode.get())
-            
-            # Hide the plot after labeling
-            if hasattr(self, 'plot_canvas') and self.plot_canvas is not None:
-                self.plot_canvas.get_tk_widget().destroy()
-                self.plot_canvas = None
-            
-        # Dynamically resize video to fit the video section frame
-        labelWidth = self.videoSection.winfo_width()
-        labelHeight = self.videoSection.winfo_height()
-        if labelWidth > 0 and labelHeight > 0:
-            frame = cv2.resize(frame, (labelWidth, labelHeight), interpolation=cv2.INTER_AREA)
 
-        # Convert to ImageTk format and show in UI
-        img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        imgtk = ImageTk.PhotoImage(image=img)
-        self.videoSection.imgtk = imgtk
-        self.videoSection.configure(image=imgtk)
+        # Only update video display if we're in home view
+        if self.videoFrame.winfo_ismapped():
+            # Dynamically resize video to fit the video section frame
+            labelWidth = self.videoSection.winfo_width()
+            labelHeight = self.videoSection.winfo_height()
+            if labelWidth > 0 and labelHeight > 0:
+                frame = cv2.resize(frame, (labelWidth, labelHeight), interpolation=cv2.INTER_AREA)
+
+            # Convert to ImageTk format and show in UI
+            img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            imgtk = ImageTk.PhotoImage(image=img)
+            self.videoSection.imgtk = imgtk
+            self.videoSection.configure(image=imgtk)
+
+        # Continue video loop
         self.gui.after(10, self.videoLoop)
+
+
+    def recordVideo(self):
+        """
+        Function call to start recording a predetermined long video and save
+        """
+        if self.recording:
+            return
+        self.textFrameText.config(text='Recording:')
+        self.recording = True
+        self.startTime = time.time()
+        timestamp = time.strftime('%Y%m%d-%H%M%S')
+        self.lastFilename = f'pose_capture_{timestamp}.avi'
+        self.out = cv2.VideoWriter(self.lastFilename, self.fourcc, self.fps, (self.frameWidth, self.frameHeight))
+        logger.info('Started recording...')
+        self.btnRecord.pack_forget()
+        self.btnGood.pack_forget()
+        self.btnBad.pack_forget()
+        self.countdownText.pack(side='top', expand=True, padx=10)
+        self.num_frames = int(self.fps * (self.recordingLength - 1))
+        self.frame_counter = 0
+        self.currentPoseData = {n: [(None, None)] * self.num_frames for n in self.nodes}
+        self.updateCountdown()
+
+
+    def updateCountdown(self):
+        """
+        Function to update the countdown in the UI during recording
+        """
+        if self.recording:
+            elapsedTime = time.time() - self.startTime
+            remainingTime = max(0, self.recordingLength - int(elapsedTime))
+            self.countdownText.config(text=f'{remainingTime} sec')
+
+            if remainingTime > 0:
+                self.gui.after(1000, self.updateCountdown)
 
 
     def distance(self, p1, p2):
@@ -256,11 +254,6 @@ class PoseRecorderApp(PoseGUIApp):
 
     def saveBad(self):
         self.saveToFolder('bad')
-
-
-    def run(self):
-        self.videoLoop()
-        self.gui.mainloop()
 
 
     def plot_trajectories(self, username, nodeName, parent_frame=None):
@@ -368,6 +361,8 @@ class PoseRecorderApp(PoseGUIApp):
         """
         self.videoFrame.pack_forget()
         self.plotFrame.pack_forget()
+        self.textFrame.pack_forget()
+        self.buttonFrame.pack_forget()
         self.analyzeButton.config(text='Home', command=self.show_home_frame)
 
         node_names = [self.landmarkDictionary[n] for n in self.nodes if n in self.landmarkDictionary]
@@ -380,12 +375,24 @@ class PoseRecorderApp(PoseGUIApp):
             for name in filtered_node_names:
                 menu.add_command(label=name, command=lambda value=name: self.analysisNodeVar.set(value))
         
-        # Add trace to analysis node selection
-        self.analysisNodeVar.trace_add('write', self.plot_analysis)
+        # Remove any existing traces before adding new ones
+        if hasattr(self, '_analysis_trace_ids'):
+            for trace_id in self._analysis_trace_ids:
+                self.analysisNodeVar.trace_remove('write', trace_id)
+            for trace_id in self._user_trace_ids:
+                self.selectedOption.trace_remove('write', trace_id)
+        
+        # Add traces to both node and user selection
+        self._analysis_trace_ids = []
+        self._user_trace_ids = []
+        self._analysis_trace_ids.append(self.analysisNodeVar.trace_add('write', self.plot_analysis))
+        self._user_trace_ids.append(self.selectedOption.trace_add('write', self.plot_analysis))
 
-        # Build analysis frame and plot trajectories
+        # Build analysis frame
         self.analysisFrame.pack(fill='both', expand=True, padx=10, pady=10)
-        self.plot_analysis()
+        # Trigger initial plot by changing the node value (which will trigger the trace)
+        if filtered_node_names:
+            self.analysisNodeVar.set(filtered_node_names[0])
 
 
     def show_home_frame(self):
@@ -393,19 +400,46 @@ class PoseRecorderApp(PoseGUIApp):
         Show the home frame of the UI
         """
         self.analysisFrame.pack_forget()
+        self.plotFrame.pack_forget()  # Hide plot frame first
         self.analyzeButton.config(text='Analyze', command=self.show_analysis_frame)
+        # Show video and plot frames
         self.videoFrame.pack(side='top', fill='both', expand=True)
-        self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)
-        
+        self.videoFrame.pack_propagate(False)  # Ensure video frame maintains its size
+        self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)  # Show plot frame again
+        self.textFrame.pack(fill='x', pady=0)  # Show text frame in home view
+        self.buttonFrame.pack(side='bottom', fill='x', pady=10)  # Show button frame in home view
+
 
     def plot_analysis(self, *args):
         """
         Main function to plot trajectories for a user and node when analyze button is clicked
         """
+        # Clear any existing plot
+        if hasattr(self, 'plot_canvas') and self.plot_canvas is not None:
+            self.plot_canvas.get_tk_widget().destroy()
+            self.plot_canvas = None
+
         current_user = self.selectedOption.get()
         node_name = self.analysisNodeVar.get()
         if current_user in self.userData and len(self.userData[current_user]) > 0:
             self.plot_trajectories(current_user, nodeName=node_name, parent_frame=self.analysisFrame)
+        else:
+            # Create a blank plot with a message if no data exists
+            fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+            ax.text(0.5, 0.5, f'No data available for {current_user}', 
+                   horizontalalignment='center', verticalalignment='center',
+                   transform=ax.transAxes)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            self.plot_canvas = FigureCanvasTkAgg(fig, master=self.analysisFrame)
+            self.plot_canvas.draw()
+            self.plot_canvas.get_tk_widget().pack(fill='both', expand=True)
+            plt.close(fig)
+
+
+    def run(self):
+        self.videoLoop()
+        self.gui.mainloop()
 
 
 if __name__ == '__main__':
