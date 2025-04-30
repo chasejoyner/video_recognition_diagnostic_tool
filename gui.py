@@ -21,43 +21,58 @@ class PoseGUIApp:
         self.guiStyle = ttk.Style(self.gui)
         self.guiStyle.theme_use('clam')
 
-        # Create dropdown lists
-        self.dropdownFrame = tk.Frame(self.gui, bg='#1e1e1e')
-        self.userOptions = ['New user']
+        # Create top frame for controls
+        self.topFrame = tk.Frame(self.gui, bg='#1e1e1e', height=40)
+        self.topFrame.pack(side='top', fill='x', padx=10, pady=10)
+        self.topFrame.pack_propagate(False)
+
+        # Create middle frame for video and plot
+        self.middleFrame = tk.Frame(self.gui, bg='#1e1e1e', height=500)
+        self.middleFrame.pack(side='top', fill='both', expand=True, padx=10, pady=10)
+        self.middleFrame.pack_propagate(False)
+
+        # Create bottom frame for text and buttons
+        self.bottomFrame = tk.Frame(self.gui, bg='#1e1e1e')
+        self.bottomFrame.pack(side='bottom', fill='x')
+
+        # Add controls to top frame
+        self.newUserButton = tk.Button(self.topFrame, text='New User', font=('Arial', 12))
+        self.newUserButton.pack(side='left', padx=5)
+        self.userOptions = []
         self.selectedUser = tk.StringVar()
-        self.selectedUser.set(self.userOptions[0])
-        self.dropdown = ttk.OptionMenu(self.gui, self.selectedUser, self.userOptions[0], *self.userOptions)
-        self.dropdown.pack(padx=10, pady=10)
-
-        # Node selection dropdown (to be populated in PoseRecorderApp)
         self.selectedNode = tk.StringVar()
+        self.userDropdownFrame = tk.Frame(self.topFrame, bg='#1e1e1e', width=100, height=40)
+        self.userDropdownFrame.pack(side='left', padx=5)
+        self.userDropdownFrame.pack_propagate(False)
+        self.userDropdown = ttk.OptionMenu(self.userDropdownFrame, self.selectedUser, '', *self.userOptions)
+        self.userDropdown.pack(expand=True)
+        self.analyzeButton = tk.Button(self.topFrame, text='Analyze', font=('Arial', 12))
+        self.analyzeButton.pack(side='right', padx=5)       
 
-        # Frame to hold analysis plot
-        self.plotFrame = tk.Frame(self.gui, bg='#1e1e1e')
-        self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)
-
-        # Create video frame in top row
-        self.videoFrame = tk.Frame(self.gui, bg='#1e1e1e')
+        # Create video frame in middle frame
+        self.videoFrame = tk.Frame(self.middleFrame, bg='#1e1e1e')
         self.videoFrame.pack(side='top', fill='both', expand=True)
         self.videoFrame.pack_propagate(False)
         self.videoSection = tk.Label(self.videoFrame)
         self.videoSection.pack(padx=10, pady=10, fill='both', expand=True)
+        self.plotFrame = tk.Frame(self.middleFrame, bg='#1e1e1e')
+        self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)
 
         # Analysis frame which shows up when the analyze button is clicked
-        self.analysisFrame = tk.Frame(self.gui, bg='#1e1e1e')
+        self.analysisFrame = tk.Frame(self.middleFrame, bg='#1e1e1e')
         self.analysisNodeVar = tk.StringVar()
         self.analysisNodeDropdown = ttk.OptionMenu(self.analysisFrame, self.analysisNodeVar, '')
         self.analysisNodeDropdown.pack(padx=10, pady=10)
         self.analysisFrame.pack_forget()
 
-        # Create text frame in middle row
-        self.textFrame = tk.Frame(self.gui, bg='#1e1e1e')
-        self.textFrameText = tk.Label(self.textFrame, text='Select an option:', font=('Arial', 14), fg='white', bg='#1e1e1e')
+        # Create text frame in bottom frame
+        self.textFrame = tk.Frame(self.bottomFrame, bg='#1e1e1e')
         self.textFrame.pack(fill='x', pady=0)
+        self.textFrameText = tk.Label(self.textFrame, text='Select an option:', font=('Arial', 14), fg='white', bg='#1e1e1e')
         self.textFrameText.pack()
 
-        # Create button frame in bottom row
-        self.buttonFrame = tk.Frame(self.gui, height=100, bg='#1e1e1e')
+        # Create button frame in bottom frame
+        self.buttonFrame = tk.Frame(self.bottomFrame, height=100, bg='#1e1e1e')
         self.buttonFrame.pack(side='bottom', fill='x', pady=10)
         self.buttonFrame.pack_propagate(False)
         self.btnRecord = tk.Button(self.buttonFrame, text='Record 5 Seconds', font=('Arial', 14), width=20)
@@ -66,64 +81,49 @@ class PoseGUIApp:
         self.btnBad = tk.Button(self.buttonFrame, text='Bad', font=('Arial', 14), width=20)
         self.countdownText = tk.Label(self.buttonFrame, font=('Arial', 14), fg='white', bg='#1e1e1e')
 
-        # Add Analyze button to the top right
-        self.analyzeButton = tk.Button(self.gui, text='Analyze', font=('Arial', 12))
-        self.analyzeButton.place(relx=1.0, x=-10, y=10, anchor='ne')
 
-        # Add tracing to selected user
-        self.selectedUser.trace_add('write', self.handleSelection)
-
-
-    def updateDropdownOptions(self):
+    def updateUserDropdownOptions(self):
         """
         Updates the options in the OptionMenu widget.
         """
-        menu = self.dropdown['menu']
+        menu = self.userDropdown['menu']
         menu.delete(0, 'end')
         for option in self.userOptions:
             menu.add_radiobutton(label=option, variable=self.selectedUser, value=option)
-        current_selection = self.selectedUser.get()
-        if current_selection in self.userOptions:
-            pass
+        
+        if self.userOptions:
+            self.userDropdown.pack()
+            if not self.selectedUser.get():
+                self.selectedUser.set(self.userOptions[0])
         else:
-            self.selectedUser.set(self.userOptions[0])
+            self.userDropdown.pack_forget()
 
 
-    def handleSelection(self, *args):
+    def addNewUser(self):
         """
-        Handles the selection of a user from the dropdown menu and sets as selected user.
+        Handles adding a new user to the dropdown
         """
-        selected_value = self.selectedUser.get()
-        if selected_value == 'New user':
-            while True:
-                new_name = simpledialog.askstring('New User', "Enter the new user's name:", parent=self.gui)
+        while True:
+            new_name = simpledialog.askstring('New User', "Enter the new user's name:", parent=self.gui)
 
-                if new_name is None:
-                    logger.info('New user entry cancelled.')
-                    if len(self.userOptions) > 1:
-                        self.selectedUser.set(self.userOptions[0])
-                    break
-
-                new_name = new_name.strip()
-                if not new_name:
-                    logger.info('Empty name entered.')
-                    messagebox.showerror('Error', 'No name was entered.')
-                    continue
-
-                if new_name == 'New user':
-                    logger.info('New user was entered as name')
-                    messagebox.showerror('Error', 'Invalid user name entered')
-                    continue
-
-                if new_name in self.userOptions:
-                    logger.info(f'User {new_name} already exists.')
-                    messagebox.showerror('Error', 'User already exists, please enter a different name.')
-                    continue
-
-                # Valid, unique name
-                new_user_index = self.userOptions.index('New user')
-                self.userOptions.insert(new_user_index, new_name)
-                self.selectedUser.set(new_name)
-                self.updateDropdownOptions()
-                logger.info(f'User changed to {new_name}')
+            if new_name is None:
+                logger.info('New user entry cancelled.')
                 break
+
+            new_name = new_name.strip()
+            if not new_name:
+                logger.info('Empty name entered.')
+                messagebox.showerror('Error', 'No name was entered.')
+                continue
+
+            if new_name in self.userOptions:
+                logger.info(f'User {new_name} already exists.')
+                messagebox.showerror('Error', 'User already exists, please enter a different name.')
+                continue
+
+            # Valid name was entered
+            self.userOptions.append(new_name)
+            self.selectedUser.set(new_name)
+            self.updateUserDropdownOptions()
+            logger.info(f'User changed to {new_name}')
+            break

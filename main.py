@@ -89,6 +89,7 @@ class PoseRecorderApp(PoseGUIApp):
         self.btnGood.config(command=self.saveGood)
         self.btnBad.config(command=self.saveBad)
         self.analyzeButton.config(command=self.show_analysis_frame)
+        self.newUserButton.config(command=self.addNewUser)
 
         # Run variables
         self.recording = False
@@ -105,7 +106,7 @@ class PoseRecorderApp(PoseGUIApp):
         """
         ret, frame = self.cap.read()
         if not ret:
-            # Show message in UI and wait
+            # No captured video, show message in UI and wait
             self.textFrameText.config(text='Please connect a webcam and press any key to continue...', fg='red')
             self.videoSection.config(text='Webcam not detected', fg='red')
             self.buttonFrame.pack_forget()
@@ -170,6 +171,7 @@ class PoseRecorderApp(PoseGUIApp):
                 df.columns = [self.landmarkDictionary.get(col, 'Unknown node') for col in df.columns]
                 df['timestamp'] = datetime.now()
                 self.userData[current_user].append(df)
+                
                 # Reset current pose data for next recording
                 self.currentPoseData = {n: [] for n in self.nodes}
 
@@ -256,7 +258,7 @@ class PoseRecorderApp(PoseGUIApp):
         shutil.move(self.lastFilename, dest)
         print(f'Saved video to: {dest}')
 
-        # Reset
+        # Reset UI to home
         self.btnGood.pack_forget()
         self.btnBad.pack_forget()
         self.btnRecord.pack(side='left', expand=True, padx=10)
@@ -318,14 +320,16 @@ class PoseRecorderApp(PoseGUIApp):
         self.plotFrame.pack_forget()
         self.textFrame.pack_forget()
         self.buttonFrame.pack_forget()
+        self.bottomFrame.pack_forget()
+
         self.analyzeButton.config(text='Home', command=self.show_home_frame)
         if not self._checkTraceExists(self.selectedUser, self._selectedUserPlotTraceId):
             self._selectedUserPlotTraceId = self.selectedUser.trace_add('write', self.plot_analysis)
 
+        # Add node names to analysis node dropdown
         node_names = [self.landmarkDictionary[n] for n in self.nodes if n in self.landmarkDictionary]
         seen = set()
         filtered_node_names = [x for x in node_names if not (x in seen or seen.add(x))]
-        # Add node names to analysis node dropdown
         if filtered_node_names:
             self.analysisNodeVar.set(filtered_node_names[0])
             menu = self.analysisNodeDropdown['menu']
@@ -352,7 +356,8 @@ class PoseRecorderApp(PoseGUIApp):
         if self._checkTraceExists(self.selectedUser, self._selectedUserPlotTraceId):
             self.selectedUser.trace_remove('write', self._selectedUserPlotTraceId)
 
-        # Show video and plot frames
+        # Show all home mode frames
+        self.bottomFrame.pack(side='bottom', fill='x', padx=10, pady=10)
         self.videoFrame.pack(side='top', fill='both', expand=True)
         self.videoFrame.pack_propagate(False)
         self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)
@@ -395,6 +400,7 @@ class PoseRecorderApp(PoseGUIApp):
         logger.info(f'Plotting trajectories for user {username} and node {nodeName}')
         if parent_frame is None:
             parent_frame = self.plotFrame
+            
         # Clear previous plot if it exists
         if hasattr(self, 'plot_canvas') and self.plot_canvas is not None:
             self.plot_canvas.get_tk_widget().destroy()
