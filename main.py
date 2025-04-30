@@ -66,10 +66,11 @@ class PoseRecorderApp(PoseGUIApp):
             self.selectedNode.set(filtered_node_names[0])
 
         # Add traces
+        self._selectedUserPlotTraceId = ''
         self.selectedNode.trace_add('write', self.on_node_change)
-        self.selectedOption.trace_add('write', self.on_user_change)
+        self.selectedUser.trace_add('write', self.on_user_change)
         self.analysisNodeVar.trace_add('write', self.plot_analysis)
-        self.selectedOption.trace_add('write', self.plot_analysis)
+        self.selectedUser.trace_add('write', lambda *args: None) # Add trace only during analysis frames
 
         # Initialize pose and recording objects
         self.mpPose = mp.solutions.pose
@@ -104,8 +105,18 @@ class PoseRecorderApp(PoseGUIApp):
         """
         ret, frame = self.cap.read()
         if not ret:
-            self.gui.after(10, self.videoLoop)
+            # Show message in UI and wait
+            self.textFrameText.config(text='Please connect a webcam and press any key to continue...', fg='red')
+            self.videoSection.config(text='Webcam not detected', fg='red')
+            self.buttonFrame.pack_forget()
+            self.gui.bind('<Key>', self.check_webcam)
             return
+
+        # Reset UI if webcam is connected
+        self.textFrameText.config(text='Select an option:', fg='white')
+        self.videoSection.config(text='', fg='white')
+        self.buttonFrame.pack(side='bottom', fill='x', pady=10)
+        self.gui.unbind('<Key>')
 
         imgRGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.pose.process(imgRGB)
@@ -152,7 +163,7 @@ class PoseRecorderApp(PoseGUIApp):
                     self.interpolate_pose_data()
                 
                 # Save pose data to user's data
-                current_user = self.selectedOption.get()
+                current_user = self.selectedUser.get()
                 if current_user not in self.userData:
                     self.userData[current_user] = []
                 df = pd.DataFrame.from_dict(self.currentPoseData)
@@ -282,7 +293,7 @@ class PoseRecorderApp(PoseGUIApp):
         """
         Update the plot when the node is changed
         """
-        current_user = self.selectedOption.get()
+        current_user = self.selectedUser.get()
         current_node = self.selectedNode.get()
         logger.info(f'Node changed to {current_node}')
         if self.analysisFrame.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
@@ -293,8 +304,7 @@ class PoseRecorderApp(PoseGUIApp):
         """
         Update the plot when the user is changed
         """
-        current_user = self.selectedOption.get()
-        logger.info(f'User changed to {current_user}')
+        current_user = self.selectedUser.get()
         if self.analysisFrame.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
             self.plot_trajectories(current_user, nodeName=self.selectedNode.get(), parent_frame=self.plotFrame)
 
@@ -309,6 +319,8 @@ class PoseRecorderApp(PoseGUIApp):
         self.textFrame.pack_forget()
         self.buttonFrame.pack_forget()
         self.analyzeButton.config(text='Home', command=self.show_home_frame)
+        if not self._checkTraceExists(self.selectedUser, self._selectedUserPlotTraceId):
+            self._selectedUserPlotTraceId = self.selectedUser.trace_add('write', self.plot_analysis)
 
         node_names = [self.landmarkDictionary[n] for n in self.nodes if n in self.landmarkDictionary]
         seen = set()
@@ -333,14 +345,19 @@ class PoseRecorderApp(PoseGUIApp):
         """
         logger.info('Showing home frame')
         self.analysisFrame.pack_forget()
-        self.plotFrame.pack_forget()  # Hide plot frame first
+        self.plotFrame.pack_forget()
         self.analyzeButton.config(text='Analyze', command=self.show_analysis_frame)
+
+        # Remove plot analysis trace for user selection during home frame
+        if self._checkTraceExists(self.selectedUser, self._selectedUserPlotTraceId):
+            self.selectedUser.trace_remove('write', self._selectedUserPlotTraceId)
+
         # Show video and plot frames
         self.videoFrame.pack(side='top', fill='both', expand=True)
-        self.videoFrame.pack_propagate(False)  # Ensure video frame maintains its size
-        self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)  # Show plot frame again
-        self.textFrame.pack(fill='x', pady=0)  # Show text frame in home view
-        self.buttonFrame.pack(side='bottom', fill='x', pady=10)  # Show button frame in home view
+        self.videoFrame.pack_propagate(False)
+        self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)
+        self.textFrame.pack(fill='x', pady=0)
+        self.buttonFrame.pack(side='bottom', fill='x', pady=10)
 
 
     def plot_analysis(self, *args):
@@ -353,7 +370,7 @@ class PoseRecorderApp(PoseGUIApp):
             self.plot_canvas.get_tk_widget().destroy()
             self.plot_canvas = None
 
-        current_user = self.selectedOption.get()
+        current_user = self.selectedUser.get()
         node_name = self.analysisNodeVar.get()
         if current_user in self.userData and len(self.userData[current_user]) > 0:
             self.plot_trajectories(current_user, nodeName=node_name, parent_frame=self.analysisFrame)
@@ -435,10 +452,54 @@ class PoseRecorderApp(PoseGUIApp):
         self.plot_canvas.get_tk_widget().pack(fill='both', expand=True)
         plt.close(fig)
 
+    
+    def _checkTraceExists(self, object, trace_id):
+        """
+        Check if a trace exists on an object
+        """
+        for _, cbname in object.trace_info():
+            if cbname == trace_id:
+                return True
+        return False
+
+
+    def cleanup_and_exit(self):
+        """
+        Clean up resources and exit the program gracefully
+        """
+        logger.info('Cleaning up resources and exiting...')
+        if hasattr(self, 'cap') and self.cap is not None:
+            self.cap.release()
+        if hasattr(self, 'out') and self.out is not None:
+            self.out.release()
+        cv2.destroyAllWindows()
+        self.gui.quit()
+        self.gui.destroy()
+
 
     def run(self):
         self.videoLoop()
         self.gui.mainloop()
+
+
+    def check_webcam(self, event):
+        """
+        Check if webcam is now available and restart video loop if it is
+        """
+        # Release the current capture if it exists
+        if hasattr(self, 'cap') and self.cap is not None:
+            self.cap.release()
+        
+        # Try to initialize new capture
+        self.cap = cv2.VideoCapture(0)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        
+        ret, _ = self.cap.read()
+        if ret:
+            self.videoLoop()
+        else:
+            self.gui.after(1000, lambda: self.check_webcam(None))
 
 
 if __name__ == '__main__':

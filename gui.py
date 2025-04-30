@@ -24,9 +24,9 @@ class PoseGUIApp:
         # Create dropdown lists
         self.dropdownFrame = tk.Frame(self.gui, bg='#1e1e1e')
         self.userOptions = ['New user']
-        self.selectedOption = tk.StringVar()
-        self.selectedOption.set(self.userOptions[0])
-        self.dropdown = ttk.OptionMenu(self.gui, self.selectedOption, self.userOptions[0], *self.userOptions)
+        self.selectedUser = tk.StringVar()
+        self.selectedUser.set(self.userOptions[0])
+        self.dropdown = ttk.OptionMenu(self.gui, self.selectedUser, self.userOptions[0], *self.userOptions)
         self.dropdown.pack(padx=10, pady=10)
 
         # Node selection dropdown (to be populated in PoseRecorderApp)
@@ -71,7 +71,7 @@ class PoseGUIApp:
         self.analyzeButton.place(relx=1.0, x=-10, y=10, anchor='ne')
 
         # Add tracing to selected user
-        self.selectedOption.trace_add('write', self.handleSelection)
+        self.selectedUser.trace_add('write', self.handleSelection)
 
 
     def updateDropdownOptions(self):
@@ -81,19 +81,19 @@ class PoseGUIApp:
         menu = self.dropdown['menu']
         menu.delete(0, 'end')
         for option in self.userOptions:
-            menu.add_radiobutton(label=option, variable=self.selectedOption, value=option)
-        current_selection = self.selectedOption.get()
+            menu.add_radiobutton(label=option, variable=self.selectedUser, value=option)
+        current_selection = self.selectedUser.get()
         if current_selection in self.userOptions:
             pass
         else:
-            self.selectedOption.set(self.userOptions[0])
+            self.selectedUser.set(self.userOptions[0])
 
 
     def handleSelection(self, *args):
         """
         Handles the selection of a user from the dropdown menu and sets as selected user.
         """
-        selected_value = self.selectedOption.get()
+        selected_value = self.selectedUser.get()
         if selected_value == 'New user':
             while True:
                 new_name = simpledialog.askstring('New User', "Enter the new user's name:", parent=self.gui)
@@ -101,7 +101,7 @@ class PoseGUIApp:
                 if new_name is None:
                     logger.info('New user entry cancelled.')
                     if len(self.userOptions) > 1:
-                        self.selectedOption.set(self.userOptions[0])
+                        self.selectedUser.set(self.userOptions[0])
                     break
 
                 new_name = new_name.strip()
@@ -116,13 +116,14 @@ class PoseGUIApp:
                     continue
 
                 if new_name in self.userOptions:
-                    logger.info(f"User '{new_name}' already exists.")
+                    logger.info(f'User {new_name} already exists.')
                     messagebox.showerror('Error', 'User already exists, please enter a different name.')
                     continue
 
                 # Valid, unique name
                 new_user_index = self.userOptions.index('New user')
                 self.userOptions.insert(new_user_index, new_name)
-                self.selectedOption.set(new_name)
+                self.selectedUser.set(new_name)
                 self.updateDropdownOptions()
+                logger.info(f'User changed to {new_name}')
                 break
