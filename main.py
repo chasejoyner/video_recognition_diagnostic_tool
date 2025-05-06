@@ -307,8 +307,10 @@ class PoseRecorderApp(PoseGUIApp):
         Update the plot when the user is changed
         """
         current_user = self.selectedUser.get()
-        if self.analysisFrame.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
-            self.plot_trajectories(current_user, nodeName=self.selectedNode.get(), parent_frame=self.plotFrame)
+        # Only update plot in home frame, not in analysis frame
+        if self.plotFrame.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
+            current_node = self.selectedNode.get()
+            self.plot_trajectories(current_user, nodeName=current_node, parent_frame=self.plotFrame)
 
 
     def show_analysis_frame(self):
@@ -339,8 +341,6 @@ class PoseRecorderApp(PoseGUIApp):
 
         # Build analysis frame
         self.analysisFrame.pack(fill='both', expand=True, padx=10, pady=10)
-        if filtered_node_names:
-            self.analysisNodeVar.set(filtered_node_names[0])
 
 
     def show_home_frame(self):
