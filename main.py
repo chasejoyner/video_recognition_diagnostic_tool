@@ -33,14 +33,12 @@ class PoseRecorderApp(PoseGUIApp):
     ----------
     recordingLength: integer for how long each recording should be
     nodeUpdateThreshold: integer specifying the euclidean distance a node should move before updating frame
-    fps: integer specifying the frames per second for recording
     interpolate: boolean to interpolate missing (None) values in self.currentPoseData for each node
     """
 
     def __init__(self, 
                  recordingLength=5, 
-                 nodeUpdateThreshold=10, 
-                 fps=30,
+                 nodeUpdateThreshold=10,
                  interpolate=False):
 
         super().__init__()
@@ -48,7 +46,6 @@ class PoseRecorderApp(PoseGUIApp):
         # Inputs
         self.recordingLength = recordingLength
         self.nodeUpdateThreshold = nodeUpdateThreshold
-        self.fps = fps
         self.interpolate = interpolate
 
         # Extract yaml contents
@@ -79,6 +76,7 @@ class PoseRecorderApp(PoseGUIApp):
         self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
         self.frameWidth = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frameHeight = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fourcc = cv2.VideoWriter_fourcc(*'XVID')
