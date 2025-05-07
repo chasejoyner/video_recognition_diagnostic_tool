@@ -8,6 +8,7 @@ import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from matplotlib.legend_handler import HandlerTuple
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 import cv2
@@ -421,9 +422,11 @@ class PoseRecorderApp(PoseGUIApp):
                 for point in trajectory
             ], dtype=np.float32)
             trajectories.append(centered_trajectory)
-            ax.scatter(centered_trajectory[1:-1, 0], centered_trajectory[1:-1, 1], color='black', zorder=1)
-            ax.scatter(centered_trajectory[0, 0], centered_trajectory[0, 1], color='purple', zorder=2)
-            ax.scatter(centered_trajectory[-1, 0], centered_trajectory[-1, 1], color='green', zorder=2)
+            
+            # Plot points
+            num_points = len(centered_trajectory)
+            colors = plt.cm.Blues(np.linspace(0, 1, num_points))
+            ax.scatter(centered_trajectory[:, 0], centered_trajectory[:, 1], color=colors, zorder=1)
 
         # Calculate and plot average trajectory
         trajectories = np.array(trajectories, dtype=np.float32)
@@ -434,7 +437,7 @@ class PoseRecorderApp(PoseGUIApp):
             else:
                 avg_trajectory.append(np.nanmean(trajectories[:, i, :], axis=0))
         avg_trajectory = np.array(avg_trajectory)
-        ax.plot(avg_trajectory[:, 0], avg_trajectory[:, 1], 'r-', linewidth=2, label='Average Trajectory', zorder=4)
+        ax.plot(avg_trajectory[:, 0], avg_trajectory[:, 1], color='red', linewidth=2, label='Average Trajectory', zorder=2)
 
         ax.set_title(f'Trajectories for {nodeName} for user {username}')
         ax.set_xlabel('')
@@ -444,11 +447,14 @@ class PoseRecorderApp(PoseGUIApp):
         ax.set_xlim((-1, 1))
         ax.set_ylim((0, 1))
         ax.invert_yaxis()
-        custom_handles = [
-            Line2D([0], [0], marker='o', color='w', markerfacecolor='purple', markersize=10, label='Start'),
-            Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=10, label='Finish')
-        ]
-        ax.legend(handles=custom_handles + ax.get_legend_handles_labels()[0])
+
+        # Add custom handles to the legend
+        gradient_line = tuple([Line2D([0, 0], [0, 0], color=color, linewidth=2) for color in colors])
+        custom_handles = [gradient_line]
+        custom_labels = ['Start → Finish']
+        ax.legend(custom_handles + ax.get_legend_handles_labels()[0],
+                  custom_labels + ax.get_legend_handles_labels()[1],
+                  handler_map={tuple: HandlerTuple(ndivide=None, pad=0.0)})
         ax.grid(True)
 
         self.plot_canvas = FigureCanvasTkAgg(fig, master=parent_frame)
