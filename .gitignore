@@ -1,5 +1,5 @@
-.idea
-.png
+*.idea
+*.png
 /build
 /dist
-.spec
+*.spec
