@@ -206,7 +206,7 @@ class PoseRecorderApp(PoseGUIApp):
         timestamp = time.strftime('%Y%m%d-%H%M%S')
         self.lastFilename = f'pose_capture_{timestamp}.avi'
         self.out = cv2.VideoWriter(self.lastFilename, self.fourcc, self.fps, (self.frameWidth, self.frameHeight))
-        logger.info('Started recording...')
+
         self.btnRecord.pack_forget()
         self.btnGood.pack_forget()
         self.btnBad.pack_forget()
@@ -309,8 +309,8 @@ class PoseRecorderApp(PoseGUIApp):
         current_user = self.selectedUser.get()
         current_node = self.selectedNode.get()
         logger.info(f'Node changed to {current_node}')
-        if self.analysisFrame.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
-            self.plot_trajectories(current_user, nodeName=current_node, parent_frame=self.plotSection)
+        if self.analysisFrame.winfo_ismapped():
+            self.plot_analysis()
 
 
     def on_user_change(self, *args):
@@ -320,9 +320,9 @@ class PoseRecorderApp(PoseGUIApp):
         logger.info('Called on user change')
         current_user = self.selectedUser.get()
         # Only update plot in home frame, not in analysis frame
-        if self.plotSection.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
+        if self.plotSection.winfo_ismapped():
             current_node = self.selectedNode.get()
-            self.plot_trajectories(current_user, nodeName=current_node, parent_frame=self.plotSection)
+            self.plot_analysis()
         # Enable record button once user exists
         if current_user and self.videoFrame.winfo_ismapped() and self.btnRecord.cget('state') == 'disabled':
             self.btnRecord.config(state='normal')
@@ -397,8 +397,9 @@ class PoseRecorderApp(PoseGUIApp):
         if current_user in self.userData and len(self.userData[current_user]) > 0:
             self.plot_trajectories(current_user, nodeName=node_name, parent_frame=self.analysisFrame)
         else:
+            logger.info(f'No data available for {current_user}')
             # Create a blank plot with a message if no data exists
-            fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+            fig, ax = plt.subplots(figsize=(10, 10), dpi=100)
             ax.text(0.5, 0.5, f'No data available for {current_user}', 
                    horizontalalignment='center', verticalalignment='center',
                    transform=ax.transAxes)
@@ -423,7 +424,7 @@ class PoseRecorderApp(PoseGUIApp):
             self.plot_canvas.get_tk_widget().destroy()
             self.plot_canvas = None
 
-        fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+        fig, ax = plt.subplots(figsize=(10, 10), dpi=100)
         # Separate good and bad trajectories
         good_trajs = []
         bad_trajs = []
