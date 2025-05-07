@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class PoseGUIApp:
     """
-    This class creates a TKinter GUI to be used by the pose recorder class.
+    This class creates a TKinter GUI to be used by the pose recorder class
     """
 
     def __init__(self):
@@ -38,13 +38,13 @@ class PoseGUIApp:
         # Add controls to top frame
         self.newUserButton = tk.Button(self.topFrame, text='New User', font=('Arial', 12))
         self.newUserButton.pack(side='left', padx=5)
-        self.userOptions = []
+        self.userNames = []
         self.selectedUser = tk.StringVar()
         self.selectedNode = tk.StringVar()
         self.userDropdownFrame = tk.Frame(self.topFrame, bg='#1e1e1e', width=100, height=40)
         self.userDropdownFrame.pack(side='left', padx=5)
         self.userDropdownFrame.pack_propagate(False)
-        self.userDropdown = ttk.OptionMenu(self.userDropdownFrame, self.selectedUser, '', *self.userOptions)
+        self.userDropdown = ttk.OptionMenu(self.userDropdownFrame, self.selectedUser, '', *self.userNames)
         self.userDropdown.pack(expand=True)
         self.analyzeButton = tk.Button(self.topFrame, text='Analyze', font=('Arial', 12))
         self.analyzeButton.pack(side='right', padx=5)       
@@ -84,17 +84,17 @@ class PoseGUIApp:
 
     def updateUserDropdownOptions(self):
         """
-        Updates the options in the OptionMenu widget.
+        Updates the user names in the dropdown menu
         """
         menu = self.userDropdown['menu']
         menu.delete(0, 'end')
-        for option in self.userOptions:
+        for option in self.userNames:
             menu.add_radiobutton(label=option, variable=self.selectedUser, value=option)
         
-        if self.userOptions:
+        if self.userNames:
             self.userDropdown.pack()
             if not self.selectedUser.get():
-                self.selectedUser.set(self.userOptions[0])
+                self.selectedUser.set(self.userNames[0])
         else:
             self.userDropdown.pack_forget()
 
@@ -116,13 +116,13 @@ class PoseGUIApp:
                 messagebox.showerror('Error', 'No name was entered.')
                 continue
 
-            if new_name in self.userOptions:
+            if new_name in self.userNames:
                 logger.info(f'User {new_name} already exists.')
                 messagebox.showerror('Error', 'User already exists, please enter a different name.')
                 continue
 
             # Valid name was entered
-            self.userOptions.append(new_name)
+            self.userNames.append(new_name)
             self.selectedUser.set(new_name)
             self.updateUserDropdownOptions()
             logger.info(f'User changed to {new_name}')

@@ -14,6 +14,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import cv2
 import mediapipe as mp
 from PIL import Image, ImageTk
+from tkinter import simpledialog, messagebox
 
 from gui import PoseGUIApp
 
@@ -98,6 +99,9 @@ class PoseRecorderApp(PoseGUIApp):
         self.currentPoseData = {n: [] for n in self.nodes}
         self.userData = {}
 
+        # Enforce user exists at startup
+        self.set_buttons_state('disabled', exclude=[self.newUserButton])
+
 
     def videoLoop(self):
         """
@@ -157,6 +161,10 @@ class PoseRecorderApp(PoseGUIApp):
                 self.textFrameText.pack()
                 self.btnGood.pack(side='left', expand=True, padx=10)
                 self.btnBad.pack(side='left', expand=True, padx=10)
+                # Enable only Good/Bad buttons for labeling
+                self.set_buttons_state('disabled', exclude=[self.btnGood, self.btnBad])
+                self.btnGood.config(state='normal')
+                self.btnBad.config(state='normal')
                 
                 # Interpolate pose data to fill in dropped frames
                 if self.interpolate:
@@ -198,6 +206,7 @@ class PoseRecorderApp(PoseGUIApp):
         """
         if self.recording:
             return
+        self.set_buttons_state('disabled')
         self.textFrameText.config(text='Recording:')
         self.recording = True
         self.startTime = time.time()
@@ -263,6 +272,8 @@ class PoseRecorderApp(PoseGUIApp):
         self.btnRecord.pack(side='left', expand=True, padx=10)
         self.textFrameText.config(text='Select an option:')
         self.lastFilename = None
+        self.set_buttons_state('normal')
+        self.enforce_user_exists()
 
 
     def saveGood(self):
@@ -310,6 +321,9 @@ class PoseRecorderApp(PoseGUIApp):
         if self.plotFrame.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
             current_node = self.selectedNode.get()
             self.plot_trajectories(current_user, nodeName=current_node, parent_frame=self.plotFrame)
+        # Enable record button once user exists
+        if current_user and self.btnRecord.cget('state') == 'disabled':
+            self.btnRecord.config(state='normal')
 
 
     def show_analysis_frame(self):
@@ -510,6 +524,18 @@ class PoseRecorderApp(PoseGUIApp):
             self.videoLoop()
         else:
             self.gui.after(1000, lambda: self.check_webcam(None))
+
+
+    def set_buttons_state(self, state, exclude=None):
+        """
+        Set the state of all main buttons
+        Optionally exclude some buttons from being changed
+        """
+        exclude = exclude or []
+        buttons = [self.btnRecord, self.btnGood, self.btnBad, self.analyzeButton, self.newUserButton]
+        for btn in buttons:
+            if btn not in exclude:
+                btn.config(state=state)
 
 
 if __name__ == '__main__':
