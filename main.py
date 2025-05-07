@@ -204,6 +204,7 @@ class PoseRecorderApp(PoseGUIApp):
         """
         Function call to start recording a predetermined long video and save
         """
+        logger.info('Recording video...')
         if self.recording:
             return
         self.set_buttons_state('disabled')
@@ -312,6 +313,7 @@ class PoseRecorderApp(PoseGUIApp):
         """
         Update the plot when the node is changed
         """
+        logger.info('Called on node change')
         current_user = self.selectedUser.get()
         current_node = self.selectedNode.get()
         logger.info(f'Node changed to {current_node}')
@@ -323,6 +325,7 @@ class PoseRecorderApp(PoseGUIApp):
         """
         Update the plot when the user is changed
         """
+        logger.info('Called on user change')
         current_user = self.selectedUser.get()
         # Only update plot in home frame, not in analysis frame
         if self.plotSection.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
