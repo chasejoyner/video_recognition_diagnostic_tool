@@ -55,15 +55,12 @@ class PoseGUIApp:
         self.videoFrame.pack_propagate(False)
         self.videoSection = tk.Label(self.videoFrame)
         self.videoSection.pack(padx=10, pady=10, fill='both', expand=True)
-        self.plotFrame = tk.Frame(self.middleFrame, bg='#1e1e1e')
-        self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)
-
+        
         # Analysis frame which shows up when the analyze button is clicked
         self.analysisFrame = tk.Frame(self.middleFrame, bg='#1e1e1e')
+        self.plotSection = tk.Frame(self.analysisFrame, bg='#1e1e1e')
         self.analysisNodeVar = tk.StringVar()
         self.analysisNodeDropdown = ttk.OptionMenu(self.analysisFrame, self.analysisNodeVar, '')
-        self.analysisNodeDropdown.pack(padx=10, pady=10)
-        self.analysisFrame.pack_forget()
 
         # Create text frame in bottom frame
         self.textFrame = tk.Frame(self.bottomFrame, bg='#1e1e1e')

@@ -273,15 +273,22 @@ class PoseRecorderApp(PoseGUIApp):
         self.textFrameText.config(text='Select an option:')
         self.lastFilename = None
         self.set_buttons_state('normal')
-        self.enforce_user_exists()
 
 
     def saveGood(self):
-        self.saveToFolder('good')
+        label = 'good'
+        self.saveToFolder(label)
+        current_user = self.selectedUser.get()
+        if current_user in self.userData and self.userData[current_user]:
+            self.userData[current_user][-1] = (self.userData[current_user][-1], label)
 
 
     def saveBad(self):
-        self.saveToFolder('bad')
+        label = 'bad'
+        self.saveToFolder(label)
+        current_user = self.selectedUser.get()
+        if current_user in self.userData and self.userData[current_user]:
+            self.userData[current_user][-1] = (self.userData[current_user][-1], label)
 
 
     def interpolate_pose_data(self):
@@ -309,7 +316,7 @@ class PoseRecorderApp(PoseGUIApp):
         current_node = self.selectedNode.get()
         logger.info(f'Node changed to {current_node}')
         if self.analysisFrame.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
-            self.plot_trajectories(current_user, nodeName=current_node, parent_frame=self.plotFrame)
+            self.plot_trajectories(current_user, nodeName=current_node, parent_frame=self.plotSection)
 
 
     def on_user_change(self, *args):
@@ -318,9 +325,9 @@ class PoseRecorderApp(PoseGUIApp):
         """
         current_user = self.selectedUser.get()
         # Only update plot in home frame, not in analysis frame
-        if self.plotFrame.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
+        if self.plotSection.winfo_ismapped() and len(self.userData.get(current_user, [])) > 0:
             current_node = self.selectedNode.get()
-            self.plot_trajectories(current_user, nodeName=current_node, parent_frame=self.plotFrame)
+            self.plot_trajectories(current_user, nodeName=current_node, parent_frame=self.plotSection)
         # Enable record button once user exists
         if current_user and self.btnRecord.cget('state') == 'disabled':
             self.btnRecord.config(state='normal')
@@ -332,10 +339,11 @@ class PoseRecorderApp(PoseGUIApp):
         """
         logger.info('Showing analysis frame')
         self.videoFrame.pack_forget()
-        self.plotFrame.pack_forget()
         self.textFrame.pack_forget()
         self.buttonFrame.pack_forget()
         self.bottomFrame.pack_forget()
+        self.plotSection.pack(fill='both', expand=False, padx=10, pady=10)
+        self.analysisNodeDropdown.pack(padx=10, pady=10)
 
         self.analyzeButton.config(text='Home', command=self.show_home_frame)
         if not self._checkTraceExists(self.selectedUser, self._selectedUserPlotTraceId):
@@ -362,7 +370,7 @@ class PoseRecorderApp(PoseGUIApp):
         """
         logger.info('Showing home frame')
         self.analysisFrame.pack_forget()
-        self.plotFrame.pack_forget()
+        self.plotSection.pack_forget()
         self.analyzeButton.config(text='Analyze', command=self.show_analysis_frame)
 
         # Remove plot analysis trace for user selection during home frame
@@ -373,7 +381,6 @@ class PoseRecorderApp(PoseGUIApp):
         self.bottomFrame.pack(side='bottom', fill='x', padx=10, pady=10)
         self.videoFrame.pack(side='top', fill='both', expand=True)
         self.videoFrame.pack_propagate(False)
-        self.plotFrame.pack(fill='both', expand=False, padx=10, pady=10)
         self.textFrame.pack(fill='x', pady=0)
         self.buttonFrame.pack(side='bottom', fill='x', pady=10)
 
@@ -412,7 +419,7 @@ class PoseRecorderApp(PoseGUIApp):
         """
         logger.info(f'Plotting trajectories for user {username} and node {nodeName}')
         if parent_frame is None:
-            parent_frame = self.plotFrame
+            parent_frame = self.plotSection
             
         # Clear previous plot if it exists
         if hasattr(self, 'plot_canvas') and self.plot_canvas is not None:
@@ -420,39 +427,59 @@ class PoseRecorderApp(PoseGUIApp):
             self.plot_canvas = None
 
         fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
-        # Extract x,y coordinates from each recording's node column
-        trajectories = []
-        for df in self.userData[username]:
+        # Separate good and bad trajectories
+        good_trajs = []
+        bad_trajs = []
+        for entry in self.userData[username]:
+            if isinstance(entry, tuple):
+                df, label = entry
+            else:
+                df, label = entry, 'good'  # fallback for legacy data
             trajectory = np.array(df[nodeName].tolist())
-            # Horizontal center the trajectory so the first point is at the origin
-            # Probably we will make ball the relative point to center around
             first_frame = [t for t in trajectory if t[0] is not None and t[1] is not None]
             first_frame = first_frame[0] if first_frame else [None, None]
             centered_trajectory = np.array([
-                [
-                    point[0] - first_frame[0] if point[0] is not None else None,
-                    point[1]
-                ]
+                [point[0] - first_frame[0] if point[0] is not None else None, point[1]]
                 for point in trajectory
             ], dtype=np.float32)
-            trajectories.append(centered_trajectory)
-            
-            # Plot points
-            num_points = len(centered_trajectory)
-            colors = plt.cm.Blues(np.linspace(0, 1, num_points))
-            ax.scatter(centered_trajectory[:, 0], centered_trajectory[:, 1], color=colors, zorder=1)
-
-        # Calculate and plot average trajectory
-        trajectories = np.array(trajectories, dtype=np.float32)
-        avg_trajectory = []
-        for i in range(trajectories.shape[1]):
-            if np.all(np.isnan(trajectories[:, i, :])):
-                avg_trajectory.append([None, None])
+            if label == 'good':
+                good_trajs.append(centered_trajectory)
             else:
-                avg_trajectory.append(np.nanmean(trajectories[:, i, :], axis=0))
-        avg_trajectory = np.array(avg_trajectory)
-        ax.plot(avg_trajectory[:, 0], avg_trajectory[:, 1], color='red', linewidth=2, label='Average Trajectory', zorder=2)
-
+                bad_trajs.append(centered_trajectory)
+        # Plot good trajectories
+        if good_trajs:
+            for traj in good_trajs:
+                num_points = len(traj)
+                colors = plt.cm.Blues(np.linspace(0, 1, num_points))
+                ax.scatter(traj[:, 0], traj[:, 1], color=colors, zorder=1)
+        # Plot bad trajectories
+        if bad_trajs:
+            for traj in bad_trajs:
+                num_points = len(traj)
+                colors = plt.cm.Purples(np.linspace(0, 1, num_points))
+                ax.scatter(traj[:, 0], traj[:, 1], color=colors, zorder=1)
+        # Calculate and plot average trajectory (for good only)
+        if good_trajs:
+            good_trajs_arr = np.array(good_trajs, dtype=np.float32)
+            avg_trajectory = []
+            for i in range(good_trajs_arr.shape[1]):
+                if np.all(np.isnan(good_trajs_arr[:, i, :])):
+                    avg_trajectory.append([None, None])
+                else:
+                    avg_trajectory.append(np.nanmean(good_trajs_arr[:, i, :], axis=0))
+            avg_trajectory = np.array(avg_trajectory)
+            ax.plot(avg_trajectory[:, 0], avg_trajectory[:, 1], color='red', linewidth=2, label='Average Good', zorder=2)
+        # Calculate and plot average trajectory (for bad only)
+        if bad_trajs:
+            bad_trajs_arr = np.array(bad_trajs, dtype=np.float32)
+            avg_trajectory = []
+            for i in range(bad_trajs_arr.shape[1]):
+                if np.all(np.isnan(bad_trajs_arr[:, i, :])):
+                    avg_trajectory.append([None, None])
+                else:
+                    avg_trajectory.append(np.nanmean(bad_trajs_arr[:, i, :], axis=0))
+            avg_trajectory = np.array(avg_trajectory)
+            ax.plot(avg_trajectory[:, 0], avg_trajectory[:, 1], color='purple', linewidth=2, label='Average Bad', zorder=2)
         ax.set_title(f'Trajectories for {nodeName} for user {username}')
         ax.set_xlabel('')
         ax.set_ylabel('')
@@ -463,9 +490,12 @@ class PoseRecorderApp(PoseGUIApp):
         ax.invert_yaxis()
 
         # Add custom handles to the legend
-        gradient_line = tuple([Line2D([0, 0], [0, 0], color=color, linewidth=2) for color in colors])
-        custom_handles = [gradient_line]
-        custom_labels = ['Start → Finish']
+        # Good gradient
+        good_grad = tuple([Line2D([0, 0], [0, 0], color=plt.cm.Blues(i), linewidth=2) for i in np.linspace(0, 1, 10)])
+        # Bad gradient
+        bad_grad = tuple([Line2D([0, 0], [0, 0], color=plt.cm.Purples(i), linewidth=2) for i in np.linspace(0, 1, 10)])
+        custom_handles = [good_grad, bad_grad]
+        custom_labels = ['Good (Start → Finish)', 'Bad (Start → Finish)']
         ax.legend(custom_handles + ax.get_legend_handles_labels()[0],
                   custom_labels + ax.get_legend_handles_labels()[1],
                   handler_map={tuple: HandlerTuple(ndivide=None, pad=0.0)})
