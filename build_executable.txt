@@ -1,0 +1,1 @@
+pyinstaller --onefile --windowed --add-data "settings.yaml;." --add-data "..\venv\video_recognition_diagnostic_tool\Lib\site-packages\mediapipe\modules;mediapipe\modules" main.py

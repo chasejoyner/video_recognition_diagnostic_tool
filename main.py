@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import yaml
 import shutil
@@ -14,7 +15,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import cv2
 import mediapipe as mp
 from PIL import Image, ImageTk
-from tkinter import simpledialog, messagebox
 
 from gui import PoseGUIApp
 
@@ -51,7 +51,12 @@ class PoseRecorderApp(PoseGUIApp):
         self.interpolate = interpolate
 
         # Extract yaml contents
-        with open('settings.yaml', 'r') as file:
+        try:
+            base_path = sys._MEIPASS
+        except AttributeError:
+            base_path = os.path.abspath(".")
+        path = os.path.join(base_path, 'settings.yaml')
+        with open(path, 'r') as file:
             data = yaml.safe_load(file)
         self.landmarkDictionary = data['LANDMARKS_DICTIONARY']
         self.poseConnections = [tuple(pc) for pc in data['POSE_CONNECTIONS']]

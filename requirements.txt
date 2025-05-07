@@ -4,3 +4,4 @@ opencv-python==4.11.0.86
 mediapipe==0.10.21
 pillow==11.1.0
 pyyaml==6.0.2
+pyinstaller==6.13.0
