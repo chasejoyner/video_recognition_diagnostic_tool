@@ -40,7 +40,6 @@ class PoseGUIApp:
         self.newUserButton.pack(side='left', padx=5)
         self.userNames = []
         self.selectedUser = tk.StringVar()
-        self.selectedNode = tk.StringVar()
         self.userDropdownFrame = tk.Frame(self.topFrame, bg='#1e1e1e', width=100, height=40)
         self.userDropdownFrame.pack(side='left', padx=5)
         self.userDropdownFrame.pack_propagate(False)
@@ -59,8 +58,8 @@ class PoseGUIApp:
         # Analysis frame which shows up when the analyze button is clicked
         self.analysisFrame = tk.Frame(self.middleFrame, bg='#1e1e1e')
         self.plotSection = tk.Frame(self.analysisFrame, bg='#1e1e1e')
-        self.analysisNodeVar = tk.StringVar()
-        self.analysisNodeDropdown = ttk.OptionMenu(self.analysisFrame, self.analysisNodeVar, '')
+        self.selectedNode = tk.StringVar()
+        self.nodeDropdown = ttk.OptionMenu(self.analysisFrame, self.selectedNode, '')
 
         # Create text frame in bottom frame
         self.textFrame = tk.Frame(self.bottomFrame, bg='#1e1e1e')

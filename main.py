@@ -66,9 +66,8 @@ class PoseRecorderApp(PoseGUIApp):
 
         # Add traces
         self._selectedUserPlotTraceId = ''
-        self.selectedNode.trace_add('write', self.on_node_change)
         self.selectedUser.trace_add('write', self.on_user_change)
-        self.analysisNodeVar.trace_add('write', self.plot_analysis)
+        self.selectedNode.trace_add('write', self.on_node_change)
         self.selectedUser.trace_add('write', lambda *args: None) # Add trace only during analysis frames
 
         # Initialize pose and recording objects
@@ -114,13 +113,7 @@ class PoseRecorderApp(PoseGUIApp):
             self.videoSection.config(text='Webcam not detected', fg='red')
             self.buttonFrame.pack_forget()
             self.gui.bind('<Key>', self.check_webcam)
-            return
-
-        # Reset UI if webcam is connected
-        self.textFrameText.config(text='Select an option:', fg='white')
-        self.videoSection.config(text='', fg='white')
-        self.buttonFrame.pack(side='bottom', fill='x', pady=10)
-        self.gui.unbind('<Key>')
+            return        
 
         imgRGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.pose.process(imgRGB)
@@ -158,7 +151,6 @@ class PoseRecorderApp(PoseGUIApp):
                 self.btnRecord.pack_forget()
                 self.countdownText.pack_forget()
                 self.textFrameText.config(text='Label the hit:')
-                self.textFrameText.pack()
                 self.btnGood.pack(side='left', expand=True, padx=10)
                 self.btnBad.pack(side='left', expand=True, padx=10)
                 # Enable only Good/Bad buttons for labeling
@@ -265,7 +257,7 @@ class PoseRecorderApp(PoseGUIApp):
         os.makedirs(label, exist_ok=True)
         dest = os.path.join(label, os.path.basename(self.lastFilename))
         shutil.move(self.lastFilename, dest)
-        print(f'Saved video to: {dest}')
+        logger.info(f'Saved video to: {dest}')
 
         # Reset UI to home
         self.btnGood.pack_forget()
@@ -332,7 +324,7 @@ class PoseRecorderApp(PoseGUIApp):
             current_node = self.selectedNode.get()
             self.plot_trajectories(current_user, nodeName=current_node, parent_frame=self.plotSection)
         # Enable record button once user exists
-        if current_user and self.btnRecord.cget('state') == 'disabled':
+        if current_user and self.videoFrame.winfo_ismapped() and self.btnRecord.cget('state') == 'disabled':
             self.btnRecord.config(state='normal')
 
 
@@ -345,8 +337,11 @@ class PoseRecorderApp(PoseGUIApp):
         self.textFrame.pack_forget()
         self.buttonFrame.pack_forget()
         self.bottomFrame.pack_forget()
-        self.plotSection.pack(fill='both', expand=False, padx=10, pady=10)
-        self.analysisNodeDropdown.pack(padx=10, pady=10)
+
+        # Build analysis frame
+        self.analysisFrame.pack(fill='both', expand=True, padx=10, pady=10)
+        self.nodeDropdown.pack(padx=10, pady=10)
+        self.plotSection.pack(fill='both', expand=True, padx=10, pady=10)
 
         self.analyzeButton.config(text='Home', command=self.show_home_frame)
         if not self._checkTraceExists(self.selectedUser, self._selectedUserPlotTraceId):
@@ -357,14 +352,13 @@ class PoseRecorderApp(PoseGUIApp):
         seen = set()
         filtered_node_names = [x for x in node_names if not (x in seen or seen.add(x))]
         if filtered_node_names:
-            self.analysisNodeVar.set(filtered_node_names[0])
-            menu = self.analysisNodeDropdown['menu']
+            self.selectedNode.set(filtered_node_names[0])
+            menu = self.nodeDropdown['menu']
             menu.delete(0, 'end')
             for name in filtered_node_names:
-                menu.add_command(label=name, command=lambda value=name: self.analysisNodeVar.set(value))
+                menu.add_command(label=name, command=lambda value=name: self.selectedNode.set(value))
 
-        # Build analysis frame
-        self.analysisFrame.pack(fill='both', expand=True, padx=10, pady=10)
+        self.plot_analysis()
 
 
     def show_home_frame(self):
@@ -399,7 +393,7 @@ class PoseRecorderApp(PoseGUIApp):
             self.plot_canvas = None
 
         current_user = self.selectedUser.get()
-        node_name = self.analysisNodeVar.get()
+        node_name = self.selectedNode.get()
         if current_user in self.userData and len(self.userData[current_user]) > 0:
             self.plot_trajectories(current_user, nodeName=node_name, parent_frame=self.analysisFrame)
         else:
@@ -437,7 +431,7 @@ class PoseRecorderApp(PoseGUIApp):
             if isinstance(entry, tuple):
                 df, label = entry
             else:
-                df, label = entry, 'good'  # fallback for legacy data
+                df, label = entry, 'good'
             trajectory = np.array(df[nodeName].tolist())
             first_frame = [t for t in trajectory if t[0] is not None and t[1] is not None]
             first_frame = first_frame[0] if first_frame else [None, None]
@@ -493,9 +487,7 @@ class PoseRecorderApp(PoseGUIApp):
         ax.invert_yaxis()
 
         # Add custom handles to the legend
-        # Good gradient
         good_grad = tuple([Line2D([0, 0], [0, 0], color=plt.cm.Blues(i), linewidth=2) for i in np.linspace(0, 1, 10)])
-        # Bad gradient
         bad_grad = tuple([Line2D([0, 0], [0, 0], color=plt.cm.Purples(i), linewidth=2) for i in np.linspace(0, 1, 10)])
         custom_handles = [good_grad, bad_grad]
         custom_labels = ['Good (Start → Finish)', 'Bad (Start → Finish)']
@@ -543,6 +535,7 @@ class PoseRecorderApp(PoseGUIApp):
         """
         Check if webcam is now available and restart video loop if it is
         """
+        self.gui.unbind('<Key>')
         # Release the current capture if it exists
         if hasattr(self, 'cap') and self.cap is not None:
             self.cap.release()
@@ -554,6 +547,9 @@ class PoseRecorderApp(PoseGUIApp):
         
         ret, _ = self.cap.read()
         if ret:
+            self.textFrameText.config(text='Select an option:', fg='white')
+            self.videoSection.config(text='', fg='white')
+            self.buttonFrame.pack(side='bottom', fill='x', pady=10)
             self.videoLoop()
         else:
             self.gui.after(1000, lambda: self.check_webcam(None))
