@@ -1,1 +1,1 @@
-pyinstaller --onefile --windowed --add-data "settings.yaml;." --add-data "..\venv\video_recognition_diagnostic_tool\Lib\site-packages\mediapipe\modules;mediapipe\modules" main.py
+pyinstaller --onefile --windowed --add-data "settings.yaml;." --add-data "icon.png;." --add-data "icon.ico;." --add-data "..\venv\video_recognition_diagnostic_tool\Lib\site-packages\mediapipe\modules;mediapipe\modules" --icon=icon.ico main.py
