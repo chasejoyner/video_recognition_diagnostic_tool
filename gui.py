@@ -15,17 +15,6 @@ class PoseGUIApp:
     def __init__(self):
         # Initialize GUI
         self.gui = tk.Tk()
-
-        # Set window icon
-        try:
-            base_path = sys._MEIPASS
-            base_path = os.path.abspath(".")
-            path = os.path.join(base_path, 'icon.png')
-            icon_img = tk.PhotoImage(file=path)
-            self.gui.iconphoto(False, icon_img)
-        except:
-            pass
-
         self.gui.minsize(800, 600)
         self.gui.title('Swing Recorder')
         self.gui.configure(bg='#1e1e1e')

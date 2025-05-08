@@ -6,6 +6,7 @@ import shutil
 import logging
 import numpy as np
 import pandas as pd
+import tkinter as tk
 from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -45,18 +46,23 @@ class PoseRecorderApp(PoseGUIApp):
 
         super().__init__()
 
+        # Get working directory
+        try:
+            base_path = sys._MEIPASS
+        except AttributeError:
+            base_path = os.path.abspath(".")
+
         # Inputs
         self.recordingLength = recordingLength
         self.nodeUpdateThreshold = nodeUpdateThreshold
         self.interpolate = interpolate
 
+        # Set window icon of GUI
+        icon_img = tk.PhotoImage(file=os.path.join(base_path, 'icon.png'))
+        self.gui.iconphoto(False, icon_img)
+
         # Extract yaml contents
-        try:
-            base_path = sys._MEIPASS
-        except AttributeError:
-            base_path = os.path.abspath(".")
-        path = os.path.join(base_path, 'settings.yaml')
-        with open(path, 'r') as file:
+        with open(os.path.join(base_path, 'settings.yaml'), 'r') as file:
             data = yaml.safe_load(file)
         self.landmarkDictionary = data['LANDMARKS_DICTIONARY']
         self.poseConnections = [tuple(pc) for pc in data['POSE_CONNECTIONS']]
