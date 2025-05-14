@@ -21,10 +21,23 @@ class PoseGUIApp:
         self.guiStyle = ttk.Style(self.gui)
         self.guiStyle.theme_use('clam')
 
-        # Create top frame for controls
-        self.topFrame = tk.Frame(self.gui, bg='#1e1e1e', height=40)
-        self.topFrame.pack(side='top', fill='x', padx=10, pady=10)
-        self.topFrame.pack_propagate(False)
+        # Create menu bar
+        self.menubar = tk.Menu(self.gui)
+        self.gui.config(menu=self.menubar)
+
+        # Create File menu
+        self.file_menu = tk.Menu(self.menubar, tearoff=0)
+        self.menubar.add_cascade(label="File", menu=self.file_menu)
+        self.file_menu.add_command(label="New User", command=self.addNewUser)
+        self.file_menu.add_command(label="Change User", command=self.show_user_selection)
+        self.file_menu.add_separator()
+        self.file_menu.add_command(label="Exit", command=self.gui.quit)
+        
+        # Create View menu
+        self.view_menu = tk.Menu(self.menubar, tearoff=0)
+        self.menubar.add_cascade(label="View", menu=self.view_menu)
+        self.view_menu.add_command(label="Analysis", command=self.show_analysis_frame)
+        self.view_menu.add_command(label="Home", command=self.show_home_frame)
 
         # Create middle frame for video and plot
         self.middleFrame = tk.Frame(self.gui, bg='#1e1e1e', height=500)
@@ -35,18 +48,13 @@ class PoseGUIApp:
         self.bottomFrame = tk.Frame(self.gui, bg='#1e1e1e')
         self.bottomFrame.pack(side='bottom', fill='x')
 
-        # Add controls to top frame
-        self.newUserButton = tk.Button(self.topFrame, text='New User', font=('Arial', 12))
-        self.newUserButton.pack(side='left', padx=5)
+        # Add profile label at top
         self.userNames = []
         self.selectedUser = tk.StringVar()
-        self.userDropdownFrame = tk.Frame(self.topFrame, bg='#1e1e1e', width=100, height=40)
-        self.userDropdownFrame.pack(side='left', padx=5)
-        self.userDropdownFrame.pack_propagate(False)
-        self.userDropdown = ttk.OptionMenu(self.userDropdownFrame, self.selectedUser, '', *self.userNames)
-        self.userDropdown.pack(expand=True)
-        self.analyzeButton = tk.Button(self.topFrame, text='Analyze', font=('Arial', 12))
-        self.analyzeButton.pack(side='right', padx=5)       
+        self.profileFrame = tk.Frame(self.gui, bg='#1e1e1e', height=30)
+        self.profileFrame.pack(side='top', fill='x', padx=10, pady=(5,0))
+        self.profileLabel = tk.Label(self.profileFrame, text='Profile: None', font=('Arial', 12), fg='white', bg='#1e1e1e')
+        self.profileLabel.pack(side='left')
 
         # Create video frame in middle frame
         self.videoFrame = tk.Frame(self.middleFrame, bg='#1e1e1e')
@@ -78,22 +86,67 @@ class PoseGUIApp:
         self.countdownText = tk.Label(self.buttonFrame, font=('Arial', 14), fg='white', bg='#1e1e1e')
 
 
+    def show_user_selection(self):
+        """
+        Show dialog to select user
+        """
+        if not self.userNames:
+            messagebox.showinfo('No Users', 'Please create a new user first.')
+            return
+
+        # Create a new window for user selection
+        dialog = tk.Toplevel(self.gui)
+        dialog.title('Select User')
+        dialog.geometry('300x400')
+        dialog.configure(bg='#1e1e1e')
+        
+        # Make dialog modal
+        dialog.transient(self.gui)
+        dialog.grab_set()
+        
+        # Add listbox for users
+        listbox = tk.Listbox(dialog, font=('Arial', 12), bg='#2d2d2d', fg='white', selectmode='single')
+        listbox.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Add users to listbox
+        for user in self.userNames:
+            listbox.insert(tk.END, user)
+            
+        # Add select button
+        def on_select():
+            selection = listbox.curselection()
+            if selection:
+                selected_user = listbox.get(selection[0])
+                self.selectedUser.set(selected_user)
+                self.update_profile_label()
+                dialog.destroy()
+                
+        select_btn = tk.Button(dialog, text='Select', command=on_select, font=('Arial', 12))
+        select_btn.pack(pady=10)
+        
+        # Center dialog on screen
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f'{width}x{height}+{x}+{y}')
+
+    def update_profile_label(self):
+        """
+        Update the profile label with current user
+        """
+        current_user = self.selectedUser.get()
+        self.profileLabel.config(text=f'Profile: {current_user if current_user else "None"}')
+
     def updateUserDropdownOptions(self):
         """
         Updates the user names in the dropdown menu
         """
-        menu = self.userDropdown['menu']
-        menu.delete(0, 'end')
-        for option in self.userNames:
-            menu.add_radiobutton(label=option, variable=self.selectedUser, value=option)
-        
         if self.userNames:
-            self.userDropdown.pack()
             if not self.selectedUser.get():
                 self.selectedUser.set(self.userNames[0])
-        else:
-            self.userDropdown.pack_forget()
-
+            self.update_profile_label()
 
     def addNewUser(self):
         """
@@ -121,5 +174,5 @@ class PoseGUIApp:
             self.userNames.append(new_name)
             self.selectedUser.set(new_name)
             self.updateUserDropdownOptions()
-            logger.info(f'User changed to {new_name}')
+            logger.info(f'Added new user {new_name}')
             break

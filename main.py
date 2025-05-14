@@ -98,8 +98,6 @@ class PoseRecorderApp(PoseGUIApp):
         self.btnRecord.config(command=self.recordVideo)
         self.btnGood.config(command=self.saveGood)
         self.btnBad.config(command=self.saveBad)
-        self.analyzeButton.config(command=self.show_analysis_frame)
-        self.newUserButton.config(command=self.addNewUser)
 
         # Run variables
         self.recording = False
@@ -108,9 +106,6 @@ class PoseRecorderApp(PoseGUIApp):
         self.lastFilename = None
         self.currentPoseData = {n: [] for n in self.nodes}
         self.userData = {}
-
-        # Enforce user exists at startup
-        self.set_buttons_state('disabled', exclude=[self.newUserButton])
 
 
     def videoLoop(self):
@@ -317,7 +312,6 @@ class PoseRecorderApp(PoseGUIApp):
         Update the plot when the node is changed
         """
         logger.info('Called on node change')
-        current_user = self.selectedUser.get()
         current_node = self.selectedNode.get()
         logger.info(f'Node changed to {current_node}')
         if self.analysisFrame.winfo_ismapped():
@@ -330,9 +324,9 @@ class PoseRecorderApp(PoseGUIApp):
         """
         logger.info('Called on user change')
         current_user = self.selectedUser.get()
-        # Only update plot in home frame, not in analysis frame
-        if self.plotSection.winfo_ismapped():
-            current_node = self.selectedNode.get()
+        logger.info(f'User changed to {current_user}')
+        # Only update plot in analysis frame, not in home frame
+        if self.analysisFrame.winfo_ismapped():
             self.plot_analysis()
         # Enable record button once user exists
         if current_user and self.videoFrame.winfo_ismapped() and self.btnRecord.cget('state') == 'disabled':
@@ -354,7 +348,6 @@ class PoseRecorderApp(PoseGUIApp):
         self.nodeDropdown.pack(padx=10, pady=10)
         self.plotSection.pack(fill='both', expand=True, padx=10, pady=10)
 
-        self.analyzeButton.config(text='Home', command=self.show_home_frame)
         if not self._checkTraceExists(self.selectedUser, self._selectedUserPlotTraceId):
             self._selectedUserPlotTraceId = self.selectedUser.trace_add('write', self.plot_analysis)
 
@@ -379,7 +372,6 @@ class PoseRecorderApp(PoseGUIApp):
         logger.info('Showing home frame')
         self.analysisFrame.pack_forget()
         self.plotSection.pack_forget()
-        self.analyzeButton.config(text='Analyze', command=self.show_analysis_frame)
 
         # Remove plot analysis trace for user selection during home frame
         if self._checkTraceExists(self.selectedUser, self._selectedUserPlotTraceId):
@@ -573,7 +565,7 @@ class PoseRecorderApp(PoseGUIApp):
         Optionally exclude some buttons from being changed
         """
         exclude = exclude or []
-        buttons = [self.btnRecord, self.btnGood, self.btnBad, self.analyzeButton, self.newUserButton]
+        buttons = [self.btnRecord, self.btnGood, self.btnBad]
         for btn in buttons:
             if btn not in exclude:
                 btn.config(state=state)
